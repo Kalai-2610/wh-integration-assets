@@ -1,4 +1,5 @@
 const { MongoClient, Db } = require('mongodb');
+const { CommonLogger } = require('./logger');
 
 
 class MongoDB {
@@ -17,10 +18,17 @@ class MongoDB {
 		MongoDB.#client
 			.connect()
 			.then((con) => {
-				console.log('DB Connection Established');
+			CommonLogger.info('DB Connection Established');
                 MongoDB.db = MongoDB.#client.db('asset1');
+				
+			}).then(async() => {
+				try{ 
+					await MongoDB.db.command({ping: 1})
+				} catch (err) {
+					console.error('Database connection failed:', err);
+				}
 			})
-			.catch((err) => console.log(err));
+			.catch((err) => console.error(err));
 	}
 }
 
