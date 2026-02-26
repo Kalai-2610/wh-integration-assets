@@ -1,16 +1,16 @@
 const { ObjectId } = require('mongodb');
-const { verifyPasswordArgon2i, generateJWT, verifyJWT, getJWTPayload } = require('../utils/crypt');
+const { hashPasswordArgon2i, verifyPasswordArgon2i, generateJWT, verifyJWT, getJWTPayload } = require('../utils/crypt');
 const { CommonLogger } = require('../utils/logger');
 const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
-const { request } = require('express');
-const e = require('express');
+const CacheMechanism = require('../utils/cache');
 
 let userCollection;
 let sessionCollection;
 setInterval(() => {
 	userCollection = MongoDB.db.collection('users');
 	sessionCollection = MongoDB.db.collection('sessions');
+	credentialsCollection = MongoDB.db.collection('credentials');
 }, 2 * 1000); // Keep the process alive
 
 module.exports.sign_in = async (req, res) => {
@@ -57,15 +57,14 @@ module.exports.verifyUser = async (req, res, next) => {
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
-		if (new Date(session.expireAt) <= new Date(request.requestTime)) {
+		console.log('Session expireAt:', new Date(session.expireAt), 'Current time:', new Date(req.requestTime));
+		if (new Date(session.expireAt) <= new Date(req.requestTime)) {
 			throw new AppError('Session expired', 401);
 		}
 		if (status.is_token_expired) {
 			throw new AppError('Access token expired', 401, { is_token_expired: true });
 		}
 		req.user = getJWTPayload(token)?.userId;
-		console.log('Verified user:', req.user);
-		console.log('Session details:', session);
 		const user = await MongoDB.db.collection('users').findOne({ _id: new ObjectId(req.user), is_active: true });
 		if (!user) {
 			throw new AppError('Invalid user token', 401);
@@ -96,7 +95,7 @@ module.exports.refresh_token = async (req, res) => {
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
-		if (new Date(session.expireAt) <= new Date(request.requestTime)) {
+		if (new Date(session.expireAt) <= new Date(req.requestTime)) {
 			throw new AppError('Session expired', 401);
 		}
 		if (status.is_token_expired) {
@@ -121,21 +120,163 @@ module.exports.refresh_token = async (req, res) => {
 
 module.exports.clear_sessions = async (req, res) => {
 	try {
-		const sessions = await sessionCollection.find({ expireAt: { $lte: req.receivedTime }}).toArray();
-		if(sessions.length === 0){
+		const sessions = await sessionCollection.find({ expireAt: { $lte: req.requestTime } }).toArray();
+		if (sessions.length === 0) {
 			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
 			return;
 		}
-		const result = sessionCollection.deleteMany({ expireAt: { $lte: req.receivedTime }});
+		const result = sessionCollection.deleteMany({ expireAt: { $lte: req.requestTime } });
 		if (result.deletedCount === 0) {
-            throw new AppError('Error in deleting', 404);
+			throw new AppError('Error in deleting', 404);
 		}
-		res.status(200).json({ success: true, message: 'Expired sessions cleared' });
+		res.status(200).json({ success: true, message: `Cleared ${result.deletedCount} expired sessions` });
 	} catch (err) {
 		if (err instanceof AppError) {
 			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
 		}
 		CommonLogger.error('Failed to clear sessions', { error: err });
 		res.status(500).json({ error: 'Failed to clear sessions' });
+	}
+};
+
+module.exports.updateUserStatus = async (req, res) => {
+	// Implementation for activating/deactivating a user
+	try {
+		 if (req.user !== system._id.toString()) {
+			throw new AppError('Unauthorized to change user status', 403);
+		};
+		const { _id, is_active } = req.body;
+		if (typeof is_active !== 'boolean') {
+			throw new AppError('is_active must be a boolean', 400);
+		}
+		const system = CacheMechanism.get('systemUser');
+		const user = await userCollection.findOne({ _id: new ObjectId(_id) });
+		if (!user) {
+			throw new AppError('User not found', 404);
+		} else if (user.email === system.email) {
+			throw new AppError('Cannot change status of this user', 403);
+		}
+		const result = await userCollection.updateOne({ _id: new ObjectId(_id) }, { $set: { is_active } });
+		if (result.modifiedCount === 0) {
+			throw new AppError('User not found or no changes made', 404);
+		}
+		res.status(200).json({ success: true, data: { _id, is_active } });
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to update user status', { error: err });
+		res.status(500).json({ error: 'Failed to update user status' });
+	}
+};
+
+module.exports.change_password = async (req, res) => {
+	// Implementation for resetting user password
+	try {
+		const { _id, new_password } = req.body;
+		if (!new_password || !_id) {
+			throw new AppError('New password and user ID are required', 400);
+		}
+		const system = CacheMechanism.get('systemUser');
+		const user = await userCollection.findOne({ _id: new ObjectId(_id) });
+		console.log(req.user, system._id.toString(), _id);
+		if (!user) {
+			throw new AppError('User not found', 404);
+		} else if (req.user !== _id && req.user !== system._id.toString()) {
+			throw new AppError('Unauthorized to change password', 403);
+		}
+		const { hash, salt } = await hashPasswordArgon2i(new_password);
+		const result = await userCollection.updateOne({ _id: new ObjectId(_id) }, { $set: { hash, salt } });
+		if (result.modifiedCount === 0) {
+			throw new AppError('User not found or no changes made', 404);
+		}
+		res.status(200).json({ success: true, message: 'Password changed successfully' });
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to change password', { error: err });
+		res.status(500).json({ error: 'Failed to change password' });
+	}
+};
+
+module.exports.verifyBasicAuth = async (req, res, next) => {
+	try {
+		const authHeader = req.header('authorization');
+		if (!authHeader || !authHeader.startsWith('Basic ')) {
+			throw new AppError('Authorization header with Basic scheme is required', 401);
+		}
+		const base64Credentials = authHeader.slice(6);
+		const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+		const [username, password] = credentials.split(':');
+		if (!username || !password) {
+			throw new AppError('Username and password are required in Basic auth', 400);
+		}
+		const credential = await credentialsCollection.findOne({ type: 'basic', username, is_active: true, _expire_on: { $gt: req.requestTime } });
+		if (!credential) {
+			throw new AppError('Invalid username or password', 401);
+		}
+		const isPasswordValid = await verifyPasswordArgon2i(password, credential.salt, credential.hash);
+		if (!isPasswordValid) {
+			throw new AppError('Invalid username or password', 401);
+		}
+		req.scopes = credential.scopes;
+		next();
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to verify basic auth', { error: err });
+		res.status(500).json({ error: 'Failed to verify basic auth' });
+	}
+};
+
+module.exports.verifyAPIKey = async (req, res, next) => {
+	try {
+		const apiKey = req.header('x-api-key');
+		if (!apiKey) {
+			throw new AppError('API key is required', 401);
+		}
+		const credential = await credentialsCollection.findOne({
+			api_key: apiKey,
+			is_active: true,
+			_expire_on: { $gt: req.requestTime }
+		});
+		if (!credential) {
+			throw new AppError('Invalid API key', 401);
+		}
+		req.scopes = credential.scopes;
+		next();
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to verify API key', { error: err });
+		res.status(500).json({ error: 'Failed to verify API key' });
+	}
+};
+
+module.exports.verifyToken = async (req, res, next) => {
+	try {
+		const token = req.header('authorization')?.startsWith('Bearer ') ? req.header('authorization').slice(7) : null;
+		if (!token) {
+			throw new AppError('Bearer token is required', 401);
+		};
+		const credential = await credentialsCollection.findOne({
+			token: token,
+			is_active: true,
+			_expire_on: { $gt: req.requestTime }
+		});
+		if (!credential) {
+			throw new AppError('Invalid token', 401);
+		}
+		req.scopes = credential.scopes;
+		next();
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to verify token', { error: err });
+		res.status(500).json({ error: 'Failed to verify token' });
 	}
 };

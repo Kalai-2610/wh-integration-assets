@@ -11,8 +11,12 @@ class MongoDB {
     static db;
 	constructor() {
 		MongoDB.#URI = process.env.DATABASE.replace('<DB_USER>', process.env.DB_USER)
-			.replace('<DB_PASSWORD>', process.env.DB_PASSWORD)
-			.replace('<DB_NAME>', process.env.DB_NAME);
+			.replace('<DB_PASSWORD>', process.env.DB_PASSWORD);
+		if (process.env.NODE_ENV === 'production') {
+			MongoDB.#URI = MongoDB.#URI.replace('<DB_NAME>', process.env.PROD_DB_NAME);
+		} else {
+			MongoDB.#URI = MongoDB.#URI.replace('<DB_NAME>', process.env.DB_NAME);
+		}
 		MongoDB.#client = new MongoClient(MongoDB.#URI);
 
 		MongoDB.#client

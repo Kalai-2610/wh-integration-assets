@@ -12,11 +12,11 @@ class RequestLogger {
 			return d;
 		}
 		// Use request/response times if available
-		const receivedTime = formatDateWithMs(req.requestTime);
+		const requestTime = formatDateWithMs(req.requestTime);
 		const sentTime = formatDateWithMs(res.sentTime);
 		let responseTime = null;
-		if (receivedTime && sentTime) {
-			responseTime = new Date(sentTime) - new Date(receivedTime);
+		if (requestTime && sentTime) {
+			responseTime = new Date(sentTime) - new Date(requestTime);
 		}
 		const logData = {
 			timestamp,
@@ -25,12 +25,13 @@ class RequestLogger {
 			request: {
 					method: req?.method,
 					url: req?.url,
+					originalUrl: req?.originalUrl,
 					headers: req?.headers,
 					body: req?.body,
 					params: req?.params,
 					query: req?.query,
 					ip: req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress,
-					receivedTime
+					requestTime
 				},
 			response: {
 					statusCode: res?.statusCode,

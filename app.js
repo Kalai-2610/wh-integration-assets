@@ -1,14 +1,16 @@
 const express = require('express');
 const morgan = require('morgan');
 const MongoDB = require('./utils/mongoDB');
-const userRouter = require('./routes/UserRouter');
-const authRouter = require('./routes/authRouter');
 const { CommonLogger, RequestLogger } = require('./utils/logger');
-const { verifyUser } = require('./controllers/authController');
+const { verifyUser, verifyBasicAuth, verifyAPIKey, verifyToken } = require('./controllers/authController');
+const AuthRouter = require('./routes/authRouter');
+const UserRouter = require('./routes/userRouter');
+const CredentialRouter = require('./routes/credentialRouter');
+const DataRouter = require('./routes/dataRouter');
 
-function processRequest  (req, res, next) {
+async function processRequest(req, res, next) {
 	req.requestTime = new Date().toISOString();
-	const originalJson = res.json.bind(res); 
+	const originalJson = res.json.bind(res);
 
 	res.json = function (body) {
 		res.body = body;
@@ -24,7 +26,15 @@ function processRequest  (req, res, next) {
 		}
 	});
 	next();
-};
+}
+function updateScopes(req, res, next) {
+	req.scopes = {
+		read: true,
+		write: true,
+		delete: true
+	};
+	next();
+}
 
 class App {
 	#app;
@@ -39,9 +49,13 @@ class App {
 		this.#app.use(processRequest);
 		this.#app.use(express.json());
 		this.#app.use(express.static('./public/'));
-		this.#app.use('/auth/v1/', authRouter);
-		this.#app.use('/api/v1/users', verifyUser, userRouter);
-		this.#app.use('/open/v1/users', userRouter);
+		this.#app.use('/auth/v1/', AuthRouter);
+		this.#app.use('/api/v1/users', verifyUser, UserRouter);
+		this.#app.use('/api/v1/credentials', verifyUser, CredentialRouter);
+		this.#app.use('/open/v1/data', updateScopes, DataRouter);
+		this.#app.use('/basic/v1/data', verifyBasicAuth, DataRouter);
+		this.#app.use('/web-api/v1/data', verifyAPIKey, DataRouter);
+		this.#app.use('/token/v1/data', verifyToken, DataRouter);
 
 		// Invalid URL handler
 		this.#app.use(async (req, res) => {

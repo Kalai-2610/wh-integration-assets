@@ -49,7 +49,10 @@ async function verifyPasswordArgon2i(password, salt, hash) {
  * @returns {string} API key
  */
 function generateApiKey(length = 32) {
-  return crypto.randomBytes(length).toString('hex');
+  return crypto
+    .randomBytes(length)
+    .toString("base64url")  // URL-safe
+    .slice(0, length);
 }
 
 /**
