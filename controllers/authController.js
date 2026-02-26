@@ -121,9 +121,20 @@ module.exports.refresh_token = async (req, res) => {
 
 module.exports.clear_sessions = async (req, res) => {
 	try {
-		sessionCollection.deleteMany({ expireAt: { $lte: req.receivedTime } });
+		const sessions = await sessionCollection.find({ expireAt: { $lte: req.receivedTime }}).toArray();
+		if(sessions.length === 0){
+			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
+			return;
+		}
+		const result = sessionCollection.deleteMany({ expireAt: { $lte: req.receivedTime }});
+		if (result.deletedCount === 0) {
+            throw new AppError('Error in deleting', 404);
+		}
 		res.status(200).json({ success: true, message: 'Expired sessions cleared' });
 	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
 		CommonLogger.error('Failed to clear sessions', { error: err });
 		res.status(500).json({ error: 'Failed to clear sessions' });
 	}

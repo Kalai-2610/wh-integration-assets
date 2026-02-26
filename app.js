@@ -1,6 +1,5 @@
 const express = require('express');
 const morgan = require('morgan');
-// const tourRouter = require('./routes/tourRouter');
 const MongoDB = require('./utils/mongoDB');
 const userRouter = require('./routes/UserRouter');
 const authRouter = require('./routes/authRouter');
@@ -42,10 +41,10 @@ class App {
 		this.#app.use(express.static('./public/'));
 		this.#app.use('/auth/v1/', authRouter);
 		this.#app.use('/api/v1/users', verifyUser, userRouter);
+		this.#app.use('/open/v1/users', userRouter);
 
 		// Invalid URL handler
 		this.#app.use(async (req, res) => {
-			const data = await MongoDB.db.collection('users').find().toArray();
 			res.body = {
 				status: 'Fail',
 				error: 'Invaild URL',
