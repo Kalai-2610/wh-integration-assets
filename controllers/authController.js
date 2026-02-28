@@ -5,14 +5,6 @@ const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
 const CacheMechanism = require('../utils/cache');
 
-let userCollection;
-let sessionCollection;
-setInterval(() => {
-	userCollection = MongoDB.db.collection('users');
-	sessionCollection = MongoDB.db.collection('sessions');
-	credentialsCollection = MongoDB.db.collection('credentials');
-}, 2 * 1000); // Keep the process alive
-
 module.exports.sign_in = async (req, res) => {
 	try {
 		const { email, password } = req.body;
@@ -20,7 +12,7 @@ module.exports.sign_in = async (req, res) => {
 		if (!email || !password) {
 			throw new AppError('Email and password are required', 400);
 		}
-		const user = await userCollection.findOne({ email });
+		const user = await MongoDB.users.findOne({ email });
 		if (!user) {
 			throw new AppError('Invalid email or password', 400);
 		}
@@ -31,7 +23,7 @@ module.exports.sign_in = async (req, res) => {
 		const access_token = generateJWT({ userId: user._id.toString() }, '10m');
 		let createdAt = new Date().toISOString();
 		let expireAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-		const session = await sessionCollection.insertOne({ userId: user._id, access_token, createdAt, expireAt });
+		const session = await MongoDB.sessions.insertOne({ userId: user._id, access_token, createdAt, expireAt });
 		res.status(200).json({ success: true, sessionId: session.insertedId, access_token, expireAt });
 	} catch (err) {
 		if (err instanceof AppError) {
@@ -53,11 +45,10 @@ module.exports.verifyUser = async (req, res, next) => {
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
 		}
-		const session = await sessionCollection.findOne({ _id: new ObjectId(sessionId) });
+		const session = await MongoDB.sessions.findOne({ _id: new ObjectId(sessionId) });
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
-		console.log('Session expireAt:', new Date(session.expireAt), 'Current time:', new Date(req.requestTime));
 		if (new Date(session.expireAt) <= new Date(req.requestTime)) {
 			throw new AppError('Session expired', 401);
 		}
@@ -91,7 +82,7 @@ module.exports.refresh_token = async (req, res) => {
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
 		}
-		const session = await sessionCollection.findOne({ _id: new ObjectId(sessionId) });
+		const session = await MongoDB.sessions.findOne({ _id: new ObjectId(sessionId) });
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
@@ -105,7 +96,7 @@ module.exports.refresh_token = async (req, res) => {
 				throw new AppError('Invalid user token', 401);
 			}
 			const access_token = generateJWT({ userId: user._id.toString() }, '10m');
-			sessionCollection.updateOne({ _id: new ObjectId(sessionId) }, { $set: { access_token } });
+			MongoDB.sessions.updateOne({ _id: new ObjectId(sessionId) }, { $set: { access_token } });
 			return res.status(200).json({ success: true, access_token });
 		}
 		throw new AppError('Access token not expired yet', 400);
@@ -120,13 +111,13 @@ module.exports.refresh_token = async (req, res) => {
 
 module.exports.clear_sessions = async (req, res) => {
 	try {
-		const sessions = await sessionCollection.find({ expireAt: { $lte: req.requestTime } }).toArray();
+		const sessions = await MongoDB.sessions.find({ expireAt: { $lte: req.requestTime } }).toArray();
 		if (sessions.length === 0) {
 			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
 			return;
 		}
-		const result = sessionCollection.deleteMany({ expireAt: { $lte: req.requestTime } });
-		if (result.deletedCount === 0) {
+		const result = await MongoDB.sessions.deleteMany({ expireAt: { $lte: req.requestTime } });
+		if (!result.deletedCount && result.deletedCount === 0) {
 			throw new AppError('Error in deleting', 404);
 		}
 		res.status(200).json({ success: true, message: `Cleared ${result.deletedCount} expired sessions` });
@@ -150,13 +141,13 @@ module.exports.updateUserStatus = async (req, res) => {
 			throw new AppError('is_active must be a boolean', 400);
 		}
 		const system = CacheMechanism.get('systemUser');
-		const user = await userCollection.findOne({ _id: new ObjectId(_id) });
+		const user = await MongoDB.users.findOne({ _id: new ObjectId(_id) });
 		if (!user) {
 			throw new AppError('User not found', 404);
 		} else if (user.email === system.email) {
 			throw new AppError('Cannot change status of this user', 403);
 		}
-		const result = await userCollection.updateOne({ _id: new ObjectId(_id) }, { $set: { is_active } });
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(_id) }, { $set: { is_active } });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
 		}
@@ -178,15 +169,14 @@ module.exports.change_password = async (req, res) => {
 			throw new AppError('New password and user ID are required', 400);
 		}
 		const system = CacheMechanism.get('systemUser');
-		const user = await userCollection.findOne({ _id: new ObjectId(_id) });
-		console.log(req.user, system._id.toString(), _id);
+		const user = await MongoDB.users.findOne({ _id: new ObjectId(_id) });
 		if (!user) {
 			throw new AppError('User not found', 404);
 		} else if (req.user !== _id && req.user !== system._id.toString()) {
 			throw new AppError('Unauthorized to change password', 403);
 		}
 		const { hash, salt } = await hashPasswordArgon2i(new_password);
-		const result = await userCollection.updateOne({ _id: new ObjectId(_id) }, { $set: { hash, salt } });
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(_id) }, { $set: { hash, salt } });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
 		}
@@ -203,7 +193,7 @@ module.exports.change_password = async (req, res) => {
 module.exports.verifyBasicAuth = async (req, res, next) => {
 	try {
 		const authHeader = req.header('authorization');
-		if (!authHeader || !authHeader.startsWith('Basic ')) {
+		if (!authHeader?.startsWith('Basic ')) {
 			throw new AppError('Authorization header with Basic scheme is required', 401);
 		}
 		const base64Credentials = authHeader.slice(6);
@@ -212,7 +202,7 @@ module.exports.verifyBasicAuth = async (req, res, next) => {
 		if (!username || !password) {
 			throw new AppError('Username and password are required in Basic auth', 400);
 		}
-		const credential = await credentialsCollection.findOne({ type: 'basic', username, is_active: true, _expire_on: { $gt: req.requestTime } });
+		const credential = await MongoDB.credentials.findOne({ type: 'basic', username, is_active: true, _expire_on: { $gt: req.requestTime } });
 		if (!credential) {
 			throw new AppError('Invalid username or password', 401);
 		}
@@ -237,7 +227,7 @@ module.exports.verifyAPIKey = async (req, res, next) => {
 		if (!apiKey) {
 			throw new AppError('API key is required', 401);
 		}
-		const credential = await credentialsCollection.findOne({
+		const credential = await MongoDB.credentials.findOne({
 			api_key: apiKey,
 			is_active: true,
 			_expire_on: { $gt: req.requestTime }
@@ -262,7 +252,7 @@ module.exports.verifyToken = async (req, res, next) => {
 		if (!token) {
 			throw new AppError('Bearer token is required', 401);
 		};
-		const credential = await credentialsCollection.findOne({
+		const credential = await MongoDB.credentials.findOne({
 			token: token,
 			is_active: true,
 			_expire_on: { $gt: req.requestTime }

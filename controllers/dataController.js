@@ -6,16 +6,16 @@ const { ObjectId } = require('mongodb');
 let dataCollection;
 setInterval(() => {
 	dataCollection = MongoDB.db.collection('data');
-}, 2 * 1000); // Keep the process alive
+}, 7 * 1000); // Keep the process alive
 
 module.exports.getAllData = async (req, res) => {
 	try {
 		if (!req?.scopes?.read) {
 			throw new AppError('Insufficient permissions to read data', 403);
 		}
-		let size = parseInt(req.query.size) || 10;
-		const page = parseInt(req.query.page) || 1;
-		size = size <= 25 ? size : 25;
+		let size = Number.parseInt(req.query.size) || 10;
+		const page = Number.parseInt(req.query.page) || 1;
+		size = Math.min(size, 25);
 		const sortDetails = {};
 		sortDetails.sortBy = req.query.sortBy || 'id';
 		sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;

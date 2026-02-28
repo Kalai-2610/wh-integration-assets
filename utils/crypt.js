@@ -1,8 +1,8 @@
 const argon2 = require('argon2');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
+const JWT_SECRET = process.env.JWT_SECRET?.trim() || 'your_jwt_secret';
 
 /**
  * Hashes a password using Argon2i, returns salt and hash separately
@@ -22,12 +22,9 @@ async function hashPasswordArgon2i(password) {
 		parallelism: 1,
 	});
 	// Split the hash: salt = everything except the last 32 chars, hash = last 32 chars
-    const saltindex = fullHash.lastIndexOf('$') + 1; // Find the last '$' to split salt and hash
+  const saltindex = fullHash.lastIndexOf('$') + 1; // Find the last '$' to split salt and hash
 	const salt = fullHash.slice(0, saltindex);
-	const hash = fullHash.slice(saltindex);
-    console.log('Generated salt:', salt);
-    console.log('Generated hash:', hash);
-    console.log('Generated full hash:', fullHash);
+	const hash = fullHash.slice(saltindex)
 	return { salt, hash };
 }
 
@@ -79,17 +76,17 @@ function generateJWT(payload, expiresIn = '1h') {
 /**
  * Verify a JWT token
  * @param {string} token - JWT token to verify
- * @returns {object} {is_valid: boolean, is_token: boolean}
+ * @returns {object} {is_invalid: boolean, is_token_expired: boolean}
  */
 function verifyJWT(token) {
   try {
     jwt.verify(token, JWT_SECRET);
-    return { is_invalid: false, is_token: false };
+    return { is_invalid: false, is_token_expired: false };
   } catch (err) {   
     if (err.name === 'TokenExpiredError') {
       return { is_invalid: false, is_token_expired: true };
     }
-    return { is_invalid: true, is_token: false };
+    return { is_invalid: true, is_token_expired: false };
   }
 }
 
@@ -102,7 +99,7 @@ function getJWTPayload(token) {
   try {
     return jwt.decode(token);
   } catch (err) {
-    return null;
+    return err;
   }
 }
 

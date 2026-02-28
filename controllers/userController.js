@@ -5,62 +5,6 @@ const { CommonLogger } = require('../utils/logger');
 const MongoDB = require('../utils/mongoDB');
 const { ObjectId } = require('mongodb');
 
-const userValidator = {
-	$jsonSchema: {
-		bsonType: 'object',
-		required: ['name', 'email', 'salt', 'hash', '_created_on', '_created_by', 'is_active'],
-		properties: {
-			_id: {
-				bsonType: 'objectId',
-				description: 'Must be an ObjectId'
-			},
-			name: {
-				bsonType: 'string',
-				minLength: 2,
-				maxLength: 100,
-				description: 'User full name is required'
-			},
-			email: {
-				bsonType: 'string',
-				pattern: '^\\S+@\\S+\\.\\S+$',
-				description: 'Must be a valid email address'
-			},
-			salt: {
-				bsonType: 'string',
-				description: 'Password salt is required'
-			},
-			hash: {
-				bsonType: 'string',
-				description: 'Password hash is required'
-			},
-			_created_on: {
-				bsonType: 'date',
-				description: 'Creation date is required'
-			},
-			_created_by: {
-				bsonType: 'objectId',
-				description: "Must reference the creator's ObjectId"
-			},
-			is_active: {
-				bsonType: 'bool',
-				description: 'Indicates if the user is active'
-			}
-		}
-	}
-};
-const userOptions = {
-	validator: userValidator,
-	validationLevel: 'strict',
-	validationAction: 'error'
-};
-
-let userCollection;
-setInterval(async () => {
-	userCollection = MongoDB.db.collection('users', userOptions);
-    const systemUser = await userCollection.findOne({ email: "Administrator" });
-    CacheMechanism.set('systemUser', systemUser);
-}, 2 * 1000); // Keep the process alive
-
 const LOOK_UP = {
 	$lookup: {
 		from: 'users',
@@ -87,16 +31,16 @@ const UNWIND = {
 };
 module.exports.getAllUsers = async (req, res) => {
 	try {
-		const size = parseInt(req.query.size) || 10;
-		const page = parseInt(req.query.page) || 1;
+		const size = Number.parseInt(req.query.size) || 10;
+		const page = Number.parseInt(req.query.page) || 1;
 		const sortDetails = {};
 		sortDetails.sortBy = req.query.sortBy || '_created_on';
 		sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
-        const is_active = req.query?.is_active == 0 ? false : true;
+        const is_active = req.query?.is_active != 0;
 		const skip = (page - 1) * size;
 
-		const total = await userCollection.countDocuments({is_active});
-        const users = await userCollection.aggregate([{ $match: { is_active } },  LOOK_UP, UNWIND, { $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } }, PROJECT, { $skip: skip }, { $limit: size }]).toArray(); 
+		const total = await MongoDB.users.countDocuments({is_active});
+        const users = await MongoDB.users.aggregate([{ $match: { is_active } },  LOOK_UP, UNWIND, { $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } }, PROJECT, { $skip: skip }, { $limit: size }]).toArray(); 
 		res.body = {
 			success: true,
 			pagination: {
@@ -117,7 +61,7 @@ module.exports.getAllUsers = async (req, res) => {
 
 module.exports.getUser = async (req, res) => {
 	try {
-		const user = await userCollection.aggregate([{ $match:{ _id: new ObjectId(req.params.id) }}, LOOK_UP, UNWIND, PROJECT]).toArray();
+		const user = await MongoDB.users.aggregate([{ $match:{ _id: new ObjectId(req.params.id) }}, LOOK_UP, UNWIND, PROJECT]).toArray();
 		delete user?.salt;
 		delete user?.hash;
 		if (!user || user.length === 0) {
@@ -140,7 +84,7 @@ module.exports.createUser = async (req, res) => {
 		if (!name || !email || !password) {
 			throw new AppError('Name, email, and password are required', 400);
 		}
-		const existingUser = await userCollection.findOne({ email });
+		const existingUser = await MongoDB.users.findOne({ email });
 		if (existingUser) {
 			throw new AppError('Email already in use', 409);
 		}
@@ -154,7 +98,7 @@ module.exports.createUser = async (req, res) => {
 			_created_on: new Date().toISOString(),
 			_created_by: new ObjectId(req.user)
 		};
-		const result = await userCollection.insertOne(newUser);
+		const result = await MongoDB.users.insertOne(newUser);
 		res.status(201).json({ success: true, data: { _id: result.insertedId } });
 	} catch (err) {
 		if (err instanceof AppError) {
@@ -176,7 +120,7 @@ module.exports.updateUser = async (req, res) => {
 		if (Object.keys(updateData).length === 0) {
 			throw new AppError('No valid fields to update', 400);
 		}
-		const result = await userCollection.updateOne({ _id: new ObjectId(userId) }, { $set: updateData });
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId) }, { $set: updateData });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
 		}
@@ -194,7 +138,7 @@ module.exports.deleteUser = async (req, res) => {
 	// Implementation for deleting a user
 	try {
 		const userId = req.params.id;
-		const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+		const user = await MongoDB.users.findOne({ _id: new ObjectId(userId) });
 		if (!user) {
 			throw new AppError('User not found', 404);
 		}
@@ -202,7 +146,7 @@ module.exports.deleteUser = async (req, res) => {
 		if (user.email === system.email) {
 			throw new AppError('Cannot delete user', 403);
 		}
-		const result = await userCollection.updateOne({ _id: new ObjectId(userId) }, { $set: { is_active: false } } );
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId) }, { $set: { is_active: false } } );
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found', 404);
 		}

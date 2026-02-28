@@ -1,10 +1,10 @@
+const CacheMechanism = require("./cache");
 const MongoDB = require("./mongoDB");
 
 class RequestLogger {
-	constructor() {}
 
     static #log(level, message, { req = null, res = null, error = null} = {}) {
-		const timestamp = new Date().toISOString();
+		const timestamp = new Date();
 		// Helper to format date with milliseconds
 		function formatDateWithMs(date) {
 			if (!date) return undefined;
@@ -46,13 +46,14 @@ class RequestLogger {
 				}
 		};
         logData.message || delete logData.message;
-        logData.error || delete logData.error;
-		console.log(JSON.stringify(logData, null, 2));
-        if(process.env.NODE_ENV === 'production' && ['error', 'warn', 'info'].includes(level)) {
-            MongoDB.db.collection('logs').insertOne(logData).catch( err => {
-                console.error('Failed to save log to MongoDB:', err);
+        logData.error || delete logData.error
+        if(CacheMechanism.get("NODE_ENV") === 'production' && ['error', 'warn', 'info'].includes(level)) {
+			MongoDB.logs.insertOne(logData).catch( err => {
+				console.error('Failed to save log to MongoDB:', err);
             });
-        }
+        } else {
+			console.log(JSON.stringify(logData, null, 2));
+		}
 	}
 
 	static info(message, opts = {}) {
@@ -73,10 +74,8 @@ class RequestLogger {
 }
 
 class CommonLogger {
-	constructor() {}
-
 	static #log(level, message, { error = null } = {}) {
-		const timestamp = new Date().toISOString();
+		const timestamp = new Date();
 		const logData = {
 			timestamp,
 			level,
@@ -88,12 +87,13 @@ class CommonLogger {
 				}
 				: undefined
 		};
-		console.log(JSON.stringify(logData, null, 2));
-        if(process.env.NODE_ENV === 'production' && ['error', 'warn', 'info'].includes(level)) {
-            MongoDB.db.collection('logs').insertOne(logData).catch( err => {
-                console.error('Failed to save log to MongoDB:', err);
+        if(CacheMechanism.get("NODE_ENV") === 'production' && ['error', 'warn', 'info'].includes(level)) {
+			MongoDB.logs.insertOne(logData).catch( err => {
+				console.error('Failed to save log to MongoDB:', err);
             });
-        }
+        } else {
+			console.log(JSON.stringify(logData, null, 2));
+		}
 	}
 
 	static info(message, opts = {}) {
