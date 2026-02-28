@@ -40,7 +40,7 @@ module.exports.verifyUser = async (req, res, next) => {
 		if (!token) {
 			throw new AppError('Access token is required', 401);
 		}
-		token = token?.startsWith('Bearer ') ? token.slice(7) : 'False ' + token;
+		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
 		const status = verifyJWT(token);
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
@@ -77,7 +77,7 @@ module.exports.refresh_token = async (req, res) => {
 		if (!token) {
 			throw new AppError('Access token is required', 401);
 		}
-		token = token?.startsWith('Bearer ') ? token.slice(7) : 'False' + token;
+		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
 		const status = verifyJWT(token);
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
@@ -109,8 +109,39 @@ module.exports.refresh_token = async (req, res) => {
 	}
 };
 
+module.exports.sign_out = async (req, res) => {
+	try {
+		let token = req.header('authorization');
+		let sessionId = req.header('sessionId');
+		if (!token) {
+			throw new AppError('Access token is required', 401);
+		}
+		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
+		const status = verifyJWT(token);
+		if (status.is_invalid) {
+			throw new AppError('Invalid access token', 401);
+		}
+		const session = await MongoDB.sessions.findOne({ _id: new ObjectId(sessionId) });
+		if (!session || session.access_token !== token) {
+			throw new AppError('Invalid session', 401);
+		}
+		await MongoDB.sessions.deleteOne({ _id: new ObjectId(req.sessionId) });
+		res.status(200).json({ success: true, message: 'Signed out successfully' });
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+		}
+		CommonLogger.error('Failed to sign out', { error: err });
+		res.status(500).json({ error: 'Failed to sign out' });
+	}
+}
+
 module.exports.clear_sessions = async (req, res) => {
 	try {
+		const system = CacheMechanism.get('systemUser');
+		if (req.user !== system._id.toString()) {
+			throw new AppError('Unauthorized to clear sessions', 403);
+		};
 		const sessions = await MongoDB.sessions.find({ expireAt: { $lte: req.requestTime } }).toArray();
 		if (sessions.length === 0) {
 			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
@@ -133,14 +164,14 @@ module.exports.clear_sessions = async (req, res) => {
 module.exports.updateUserStatus = async (req, res) => {
 	// Implementation for activating/deactivating a user
 	try {
-		 if (req.user !== system._id.toString()) {
+		const system = CacheMechanism.get('systemUser');
+		if (req.user !== system._id.toString()) {
 			throw new AppError('Unauthorized to change user status', 403);
 		};
 		const { _id, is_active } = req.body;
 		if (typeof is_active !== 'boolean') {
 			throw new AppError('is_active must be a boolean', 400);
 		}
-		const system = CacheMechanism.get('systemUser');
 		const user = await MongoDB.users.findOne({ _id: new ObjectId(_id) });
 		if (!user) {
 			throw new AppError('User not found', 404);

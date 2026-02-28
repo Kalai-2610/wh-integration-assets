@@ -25,8 +25,9 @@ The application requires a `config.env` file in the root directory with the foll
 | :--- | :--- | :--- |
 | `POST` | `/sign_in` | Sign in to the application. |
 | `GET` | `/refresh_token` | Refresh the authentication token. |
-| `DELETE` | `/clear_sessions` | Clear all active sessions (Requires Auth). |
 | `POST` | `/change_password` | Change user password (Requires Auth). |
+| `DELETE` | `/sign_out` | Sign out from the application (Requires Auth). |
+| `DELETE` | `/clear_sessions` | Clear all active sessions (Requires Auth). |
 | `POST` | `/update_user_status` | Update user status (Requires Auth). |
 
 ### 2. User Management (`/api/v1/users`)
