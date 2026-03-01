@@ -65,8 +65,8 @@ function buildStringSchema(field, errors) {
     if (field?.max !== undefined && field.max > LIMITS.STRING_MAX)
         addError(errors, field.key, `max > ${LIMITS.STRING_MAX}`);
 
-    const field_min = Math.max(field?.min, LIMITS.STRING_MIN);
-    const field_max = Math.min(field?.max, LIMITS.STRING_MAX);
+    const field_min = field?.min ?? LIMITS.STRING_MIN;
+    const field_max = field?.max ?? LIMITS.STRING_MAX;
     schema = schema.min(field_min).max(field_max);
     if (field.regex) {
         schema = schema.pattern(new RegExp(field.regex));

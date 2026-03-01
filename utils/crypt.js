@@ -10,22 +10,22 @@ const JWT_SECRET = process.env.JWT_SECRET?.trim() || 'your_jwt_secret';
  * @returns {Promise<{salt: string, hash: string}>}
  */
 async function hashPasswordArgon2i(password) {
-	// Generate a random salt
-	const saltRaw = crypto.randomBytes(16);
-	// Hash the password with Argon2i
-	const fullHash = await argon2.hash(password, {
-		type: argon2.argon2i,
-		salt: saltRaw,
-		hashLength: 32,
-		timeCost: 3,
-		memoryCost: 4096,
-		parallelism: 1,
-	});
-	// Split the hash: salt = everything except the last 32 chars, hash = last 32 chars
+  // Generate a random salt
+  const saltRaw = crypto.randomBytes(16);
+  // Hash the password with Argon2i
+  const fullHash = await argon2.hash(password, {
+    type: argon2.argon2i,
+    salt: saltRaw,
+    hashLength: 32,
+    timeCost: 3,
+    memoryCost: 4096,
+    parallelism: 1,
+  });
+  // Split the hash: salt = everything except the last 32 chars, hash = last 32 chars
   const saltindex = fullHash.lastIndexOf('$') + 1; // Find the last '$' to split salt and hash
-	const salt = fullHash.slice(0, saltindex);
-	const hash = fullHash.slice(saltindex)
-	return { salt, hash };
+  const salt = fullHash.slice(0, saltindex);
+  const hash = fullHash.slice(saltindex)
+  return { salt, hash };
 }
 
 /**
@@ -36,8 +36,8 @@ async function hashPasswordArgon2i(password) {
  * @returns {Promise<boolean>}
  */
 async function verifyPasswordArgon2i(password, salt, hash) {
-	const fullHash = salt + hash;
-	return await argon2.verify(fullHash, password);
+  const fullHash = salt + hash;
+  return await argon2.verify(fullHash, password);
 }
 
 /**
@@ -82,7 +82,7 @@ function verifyJWT(token) {
   try {
     jwt.verify(token, JWT_SECRET);
     return { is_invalid: false, is_token_expired: false };
-  } catch (err) {   
+  } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return { is_invalid: false, is_token_expired: true };
     }
@@ -103,12 +103,17 @@ function getJWTPayload(token) {
   }
 }
 
+function generateUUIDv4() {
+  return crypto.randomUUID();
+}
+
 module.exports = {
-	hashPasswordArgon2i,
-	verifyPasswordArgon2i,
-    generateApiKey,
-    verifyApiKey,
-    generateJWT,
-    verifyJWT,
-    getJWTPayload
+  hashPasswordArgon2i,
+  verifyPasswordArgon2i,
+  generateApiKey,
+  verifyApiKey,
+  generateJWT,
+  verifyJWT,
+  getJWTPayload,
+  generateUUIDv4
 };

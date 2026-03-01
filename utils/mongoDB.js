@@ -39,9 +39,19 @@ class MongoDB {
 	 * @type {Collection}
 	 */
 	static resources;
+	/**
+	 * Points to the oauth_codes collection.
+	 * @type {Collection}
+	 */
+	static oauth_codes;
+	/**
+	 * Points to the oauth_tokens collection.
+	 * @type {Collection}
+	 */
+	static oauth_tokens;
 
 	static #init() {
-		const system_collections = ['users', 'sessions', 'credentials', 'logs', "resources"];
+		const system_collections = ['users', 'sessions', 'credentials', 'logs', "resources", "oauth_codes", "oauth_tokens"];
 		CacheMechanism.set("system_collections", system_collections);
 		const logs_options = {
 			timeseries: {
@@ -87,6 +97,8 @@ class MongoDB {
 					MongoDB.sessions = MongoDB.db.collection('sessions');
 					MongoDB.credentials = MongoDB.db.collection('credentials');
 					MongoDB.resources = MongoDB.db.collection('resources');
+					MongoDB.oauth_codes = MongoDB.db.collection('oauth_codes');
+					MongoDB.oauth_tokens = MongoDB.db.collection('oauth_tokens');
 					const systemUser = MongoDB.users.findOne({ email: "Administrator" });
 					CacheMechanism.set('systemUser', systemUser);
 					console.log("System Collections are initialized");

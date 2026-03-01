@@ -24,7 +24,7 @@ module.exports.sign_in = async (req, res) => {
 		const access_token = generateJWT({ userId: user._id.toString() }, '10m');
 		const { _created_on, _expire_on } = get_validity(60);
 		const session = await MongoDB.sessions.insertOne({ userId: user._id, access_token, _created_on, _expire_on });
-		res.status(200).json({ success: true, sessionId: session.insertedId, access_token, _expire_on });
+		res.status(200).json({ success: true, sessionId: session.insertedId, userId: user._id, access_token, _expire_on });
 	} catch (err) {
 		if (err instanceof AppError) {
 			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
@@ -301,3 +301,47 @@ module.exports.verifyToken = async (req, res, next) => {
 		res.status(500).json({ error: 'Failed to verify token' });
 	}
 };
+
+module.exports.verifyOauth = async (req, res, next) => {
+	try {
+		const authHeader = req.header('authorization');
+		if (!authHeader?.startsWith('Bearer ')) {
+			throw new AppError('Bearer token is required', 401);
+		}
+
+		const token = authHeader.slice(7);
+		const { is_invalid, is_token_expired } = verifyJWT(token);
+
+		if (is_invalid) {
+			throw new AppError('Invalid token', 401);
+		}
+
+		if (is_token_expired) {
+			throw new AppError('Token expired', 401);
+		}
+
+		const payload = getJWTPayload(token);
+		if (!payload) {
+			throw new AppError('Invalid token payload', 401);
+		}
+
+		// Attach OAuth data to request
+		req.oauth = {
+			userId: payload.userId,
+			clientId: payload.clientId,
+			scopes: payload.scopes,
+			grantType: payload.grant_type
+		};
+
+		// Also map to common req.scopes for compatibility with existing authorization checks
+		req.scopes = payload.scopes;
+
+		next();
+	} catch (err) {
+		if (err instanceof AppError) {
+			return res.status(err.statusCode).json({ success: false, error: err.message });
+		}
+		CommonLogger.error('Failed to verify OAuth token', { error: err });
+		res.status(500).json({ success: false, error: 'Internal server error' });
+	}
+}

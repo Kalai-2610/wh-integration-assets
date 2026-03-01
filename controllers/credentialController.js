@@ -2,7 +2,7 @@ const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
 const { CommonLogger } = require('../utils/logger');
 const { get_validity } = require('../utils/glOperations');
-const { generateApiKey, hashPasswordArgon2i } = require('../utils/crypt');
+const { generateApiKey, hashPasswordArgon2i, generateUUIDv4 } = require('../utils/crypt');
 const { ObjectId } = require('mongodb');
 
 function getScopesFromQuery(scopes) {
@@ -29,7 +29,7 @@ function validateScopes(scopes) {
 }
 
 async function validateCreateCredentialInput(data) {
-    const { type, scopes } = data;
+    const { name, type, scopes } = data;
     let result = { is_active: true };
     if (!type) {
         throw new AppError('Credential type is required', 400);
@@ -50,9 +50,31 @@ async function validateCreateCredentialInput(data) {
         const { hash, salt } = await hashPasswordArgon2i(password);
         result.hash = hash;
         result.salt = salt;
-    } else if (type.toLowerCase() === 'api_key' || type.toLowerCase() === 'token') {
+    } else if (type.toLowerCase() === 'api_key' || type.toLowerCase() === 'token' || type.toLowerCase() === "oauth2") {
         result.type = type.toLowerCase();
-        result[result.type] = result.type === 'api_key' ? generateApiKey(42) : generateApiKey(64);
+        result.name = name;
+        if (!name) {
+            throw new AppError(`name is required for ${type} credentials`, 400);
+        }
+        const existingCredential = await MongoDB.credentials.findOne({ name, type: result.type, is_active: true });
+        if (existingCredential) {
+            throw new AppError('Name already exists for this credential type', 400);
+        }
+        if (result.type === "oauth2") {
+            const { redirect_uri } = data;
+            result.redirect_uri = redirect_uri;
+            result.client_secret = generateApiKey(64);
+            let flag = true
+            while (flag) {
+                result.client_id = generateUUIDv4();
+                const existingClient = await MongoDB.credentials.findOne({ client_id: result.client_id });
+                if (!existingClient) {
+                    flag = false;
+                }
+            }
+        } else {
+            result[result.type] = result.type === 'api_key' ? generateApiKey(42) : generateApiKey(64);
+        }
     } else {
         throw new AppError('Unsupported credential type', 400);
     }
@@ -61,7 +83,7 @@ async function validateCreateCredentialInput(data) {
 
 async function validateUpdateCredentialInput(id, data) {
     const credential = await MongoDB.credentials.findOne({ _id: new ObjectId(id), is_active: true });
-    const { password, scopes } = data;
+    const { name, password, scopes } = data;
     const result = {};
     if (!credential) {
         throw new AppError('Credential not found', 404);
@@ -79,12 +101,21 @@ async function validateUpdateCredentialInput(id, data) {
             result.hash = hash;
             result.salt = salt;
         }
-    } else if (credential.type === 'api_key' || credential.type === 'token') {
-        if (!scopes) {
-            throw new AppError('Scopes are required for API key or token credentials', 400);
+    } else if (credential.type === 'api_key' || credential.type === 'token' || credential.type === 'oauth2') {
+        if (!scopes && !name) {
+            throw new AppError('Scopes or name are required for API key or token credentials', 400);
         }
-        validateScopes(scopes);
-        result.scopes = getScopesFromQuery(scopes);
+        if (name) {
+            const existingCredential = await MongoDB.credentials.findOne({ name, type: credential.type, is_active: true });
+            if (existingCredential) {
+                throw new AppError('Name already exists for this credential type', 400);
+            }
+            result.name = name;
+        }
+        if (scopes) {
+            validateScopes(scopes);
+            result.scopes = getScopesFromQuery(scopes);
+        }
     }
     return result;
 }

@@ -3,13 +3,17 @@ const morgan = require('morgan');
 const MongoDB = require('./utils/mongoDB');
 const CacheMechanism = require('./utils/cache');
 const { RequestLogger } = require('./utils/logger');
-const { verifyUser, verifyBasicAuth, verifyAPIKey, verifyToken } = require('./controllers/authController');
+const { verifyUser, verifyBasicAuth, verifyAPIKey, verifyToken, verifyOauth } = require('./controllers/authController');
 const AuthRouter = require('./routes/authRouter');
 const UserRouter = require('./routes/userRouter');
 const CredentialRouter = require('./routes/credentialRouter');
 const ResourceRouter = require('./routes/resourceRouter');
 const DataRouter = require('./routes/dataRouter');
 const dynamicDataRouter = require('./routes/dynamicDataRouter');
+const OAuthRouter = require('./routes/oauthRouter');
+
+const jsonParser = express.json();
+const urlEncodedParser = express.urlencoded({ extended: true });
 
 async function processRequest(req, res, next) {
 	req.requestTime = new Date().toISOString();
@@ -29,9 +33,20 @@ async function processRequest(req, res, next) {
 		}
 	});
 	const content_type = req.header('content-type');
-	if (content_type && content_type !== 'application/json') {
-		res.status(400).json({ success: false, error: 'Invalid content type' });
+	if (content_type && !['application/x-www-form-urlencoded', 'application/json'].includes(content_type)) {
+		res.status(400).json({ success: false, error: `Invalid content type - ${content_type}` });
 		return;
+	}
+	next();
+}
+
+async function requestParser(req, res, next) {
+	const content_type = req.header('content-type');
+	if (content_type === 'application/x-www-form-urlencoded') {
+		return urlEncodedParser(req, res, next);
+	}
+	if (content_type === 'application/json') {
+		return jsonParser(req, res, next);
 	}
 	next();
 }
@@ -55,9 +70,10 @@ class App {
 		}
 
 		this.#app.use(processRequest);
-		this.#app.use(express.json());
+		this.#app.use(requestParser);
 		this.#app.use(express.static('./public/'));
 		this.#app.use('/auth/v1/', AuthRouter);
+		this.#app.use('/auth/oauth/v1/', OAuthRouter);
 		this.#app.use('/api/v1/users', verifyUser, UserRouter);
 		this.#app.use('/api/v1/resources', verifyUser, ResourceRouter);
 		this.#app.use('/api/v1/credentials', verifyUser, CredentialRouter);
@@ -66,6 +82,8 @@ class App {
 		this.#app.use('/basic/v1', verifyBasicAuth, dynamicDataRouter);
 		this.#app.use('/api_key/v1', verifyAPIKey, dynamicDataRouter);
 		this.#app.use('/token/v1', verifyToken, dynamicDataRouter);
+		this.#app.use('/oauth2/v1', verifyOauth, dynamicDataRouter)
+
 
 		// Invalid URL handler
 		this.#app.use(async (req, res) => {
