@@ -1,9 +1,10 @@
-const { ObjectId } = require('mongodb');
-const { hashPasswordArgon2i, verifyPasswordArgon2i, generateJWT, verifyJWT, getJWTPayload } = require('../utils/crypt');
-const { CommonLogger } = require('../utils/logger');
 const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
 const CacheMechanism = require('../utils/cache');
+const { CommonLogger } = require('../utils/logger');
+const { hashPasswordArgon2i, verifyPasswordArgon2i, generateJWT, verifyJWT, getJWTPayload } = require('../utils/crypt');
+const { ObjectId } = require('mongodb');
+const { get_validity } = require('../utils/glOperations');
 
 module.exports.sign_in = async (req, res) => {
 	try {
@@ -21,10 +22,9 @@ module.exports.sign_in = async (req, res) => {
 			throw new AppError('Invalid password', 401);
 		}
 		const access_token = generateJWT({ userId: user._id.toString() }, '10m');
-		let createdAt = new Date().toISOString();
-		let expireAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-		const session = await MongoDB.sessions.insertOne({ userId: user._id, access_token, createdAt, expireAt });
-		res.status(200).json({ success: true, sessionId: session.insertedId, access_token, expireAt });
+		const { _created_on, _expire_on } = get_validity(60);
+		const session = await MongoDB.sessions.insertOne({ userId: user._id, access_token, _created_on, _expire_on });
+		res.status(200).json({ success: true, sessionId: session.insertedId, access_token, _expire_on });
 	} catch (err) {
 		if (err instanceof AppError) {
 			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
@@ -49,7 +49,7 @@ module.exports.verifyUser = async (req, res, next) => {
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
-		if (new Date(session.expireAt) <= new Date(req.requestTime)) {
+		if (new Date(session._expire_on) <= new Date(req.requestTime)) {
 			throw new AppError('Session expired', 401);
 		}
 		if (status.is_token_expired) {
@@ -86,7 +86,7 @@ module.exports.refresh_token = async (req, res) => {
 		if (!session || session.access_token !== token) {
 			throw new AppError('Invalid session', 401);
 		}
-		if (new Date(session.expireAt) <= new Date(req.requestTime)) {
+		if (new Date(session._expire_on) <= new Date(req.requestTime)) {
 			throw new AppError('Session expired', 401);
 		}
 		if (status.is_token_expired) {
@@ -134,7 +134,7 @@ module.exports.sign_out = async (req, res) => {
 		CommonLogger.error('Failed to sign out', { error: err });
 		res.status(500).json({ error: 'Failed to sign out' });
 	}
-}
+};
 
 module.exports.clear_sessions = async (req, res) => {
 	try {
@@ -142,12 +142,12 @@ module.exports.clear_sessions = async (req, res) => {
 		if (req.user !== system._id.toString()) {
 			throw new AppError('Unauthorized to clear sessions', 403);
 		};
-		const sessions = await MongoDB.sessions.find({ expireAt: { $lte: req.requestTime } }).toArray();
+		const sessions = await MongoDB.sessions.find({ _expire_on: { $lte: req.requestTime } }).toArray();
 		if (sessions.length === 0) {
 			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
 			return;
 		}
-		const result = await MongoDB.sessions.deleteMany({ expireAt: { $lte: req.requestTime } });
+		const result = await MongoDB.sessions.deleteMany({ _expire_on: { $lte: req.requestTime } });
 		if (!result.deletedCount && result.deletedCount === 0) {
 			throw new AppError('Error in deleting', 404);
 		}

@@ -1,8 +1,8 @@
+const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
 const CacheMechanism = require('../utils/cache');
-const { hashPasswordArgon2i } = require('../utils/crypt');
 const { CommonLogger } = require('../utils/logger');
-const MongoDB = require('../utils/mongoDB');
+const { hashPasswordArgon2i } = require('../utils/crypt');
 const { ObjectId } = require('mongodb');
 
 const LOOK_UP = {
@@ -17,17 +17,17 @@ const LOOK_UP = {
 	}
 };
 const PROJECT = {
-    $project: {
-    salt: 0,
-    hash: 0,
-    _created_by: 0,
-    }
+	$project: {
+		salt: 0,
+		hash: 0,
+		_created_by: 0,
+	}
 };
 const UNWIND = {
-    $unwind: {
-    path: '$createdBy',
-    preserveNullAndEmptyArrays: true
-    }
+	$unwind: {
+		path: '$createdBy',
+		preserveNullAndEmptyArrays: true
+	}
 };
 module.exports.getAllUsers = async (req, res) => {
 	try {
@@ -36,11 +36,11 @@ module.exports.getAllUsers = async (req, res) => {
 		const sortDetails = {};
 		sortDetails.sortBy = req.query.sortBy || '_created_on';
 		sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
-        const is_active = req.query?.is_active != 0;
+		const is_active = req.query?.is_active != 0;
 		const skip = (page - 1) * size;
 
-		const total = await MongoDB.users.countDocuments({is_active});
-        const users = await MongoDB.users.aggregate([{ $match: { is_active } },  LOOK_UP, UNWIND, { $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } }, PROJECT, { $skip: skip }, { $limit: size }]).toArray(); 
+		const total = await MongoDB.users.countDocuments({ is_active });
+		const users = await MongoDB.users.aggregate([{ $match: { is_active } }, LOOK_UP, UNWIND, { $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } }, PROJECT, { $skip: skip }, { $limit: size }]).toArray();
 		res.body = {
 			success: true,
 			pagination: {
@@ -61,7 +61,7 @@ module.exports.getAllUsers = async (req, res) => {
 
 module.exports.getUser = async (req, res) => {
 	try {
-		const user = await MongoDB.users.aggregate([{ $match:{ _id: new ObjectId(req.params.id) }}, LOOK_UP, UNWIND, PROJECT]).toArray();
+		const user = await MongoDB.users.aggregate([{ $match: { _id: new ObjectId(req.params.id) } }, LOOK_UP, UNWIND, PROJECT]).toArray();
 		delete user?.salt;
 		delete user?.hash;
 		if (!user || user.length === 0) {
@@ -113,14 +113,15 @@ module.exports.updateUser = async (req, res) => {
 	// Implementation for updating user details
 	try {
 		const userId = req.params.id;
-		const { name, is_active } = req.body;
-		const updateData = { name, is_active };
+		const { name } = req.body;
+		const updateData = { name };
 		name || delete updateData.name;
-		is_active === true || is_active === false || delete updateData.is_active;
 		if (Object.keys(updateData).length === 0) {
 			throw new AppError('No valid fields to update', 400);
 		}
-		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId) }, { $set: updateData });
+		updateData._updated_on = new Date().toISOString();
+		updateData._updated_by = new ObjectId(req.user);
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId), is_active: true }, { $set: updateData });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
 		}
@@ -138,15 +139,20 @@ module.exports.deleteUser = async (req, res) => {
 	// Implementation for deleting a user
 	try {
 		const userId = req.params.id;
-		const user = await MongoDB.users.findOne({ _id: new ObjectId(userId) });
+		const user = await MongoDB.users.findOne({ _id: new ObjectId(userId), is_active: true });
 		if (!user) {
 			throw new AppError('User not found', 404);
 		}
-		const system = CacheMechanism.get('systemUser')
+		const system = CacheMechanism.get('systemUser');
 		if (user.email === system.email) {
 			throw new AppError('Cannot delete user', 403);
 		}
-		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId) }, { $set: { is_active: false } } );
+		const deleteData = {
+			is_active: false,
+			_updated_on: new Date().toISOString(),
+			_updated_by: new ObjectId(req.user)
+		};
+		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId), is_active: true }, { $set: deleteData });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found', 404);
 		}

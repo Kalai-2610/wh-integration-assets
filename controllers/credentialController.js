@@ -1,9 +1,9 @@
-const { ObjectId } = require('mongodb');
 const MongoDB = require('../utils/mongoDB');
 const AppError = require('../utils/appError');
 const { CommonLogger } = require('../utils/logger');
-const { generateApiKey, hashPasswordArgon2i } = require('../utils/crypt');
 const { get_validity } = require('../utils/glOperations');
+const { generateApiKey, hashPasswordArgon2i } = require('../utils/crypt');
+const { ObjectId } = require('mongodb');
 
 function getScopesFromQuery(scopes) {
     const result = {};
@@ -61,12 +61,12 @@ async function validateCreateCredentialInput(data) {
 
 async function validateUpdateCredentialInput(id, data) {
     const credential = await MongoDB.credentials.findOne({ _id: new ObjectId(id), is_active: true });
-    const {password, scopes} = data;
+    const { password, scopes } = data;
     const result = {};
     if (!credential) {
         throw new AppError('Credential not found', 404);
     }
-    if (credential.type === 'basic' ) {
+    if (credential.type === 'basic') {
         if (!password || !scopes) {
             throw new AppError('Password or scopes are required for basic credentials', 400);
         }
@@ -90,112 +90,120 @@ async function validateUpdateCredentialInput(id, data) {
 }
 
 module.exports.getAllCredentials = async (req, res) => {
-	try {
-		const size = Number.parseInt(req.query.size) || 10;
-		const page = Number.parseInt(req.query.page) || 1;
-		const sortDetails = {};
-		sortDetails.sortBy = req.query.sortBy || 'id';
-		sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
-		const skip = (page - 1) * size;
+    try {
+        const size = Number.parseInt(req.query.size) || 10;
+        const page = Number.parseInt(req.query.page) || 1;
+        const sortDetails = {};
+        sortDetails.sortBy = req.query.sortBy || 'id';
+        sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+        const skip = (page - 1) * size;
 
-		const total = await MongoDB.credentials.countDocuments({ is_active: true });
-		const data = await MongoDB.credentials
-			.find({ is_active: true })
-			.sort({ [sortDetails.sortBy]: sortDetails.sortOrder })
-			.skip(skip)
-			.limit(size)
-			.toArray();
-		res.body = {
-			success: true,
-			pagination: {
-				total,
-				page,
-				size,
-				sortBy: sortDetails.sortBy,
-				sortOrder: sortDetails.sortOrder === 1 ? 'asc' : 'desc'
-			},
-			data
-		};
-		res.status(200).json(res.body);
-	} catch (err) {
-		CommonLogger.error('Failed to fetch credentials', { error: err });
-		res.status(500).json({ error: 'Failed to fetch credentials' });
-	}
+        const total = await MongoDB.credentials.countDocuments({ is_active: true });
+        const data = await MongoDB.credentials
+            .find({ is_active: true })
+            .sort({ [sortDetails.sortBy]: sortDetails.sortOrder })
+            .skip(skip)
+            .limit(size)
+            .toArray();
+        res.body = {
+            success: true,
+            pagination: {
+                total,
+                page,
+                size,
+                sortBy: sortDetails.sortBy,
+                sortOrder: sortDetails.sortOrder === 1 ? 'asc' : 'desc'
+            },
+            data
+        };
+        res.status(200).json(res.body);
+    } catch (err) {
+        CommonLogger.error('Failed to fetch credentials', { error: err });
+        res.status(500).json({ error: 'Failed to fetch credentials' });
+    }
 };
 
 module.exports.getCredential = async (req, res) => {
-	try {
-		const data = await MongoDB.credentials.findOne({ id: new ObjectId(req.params.id), is_active: true });
-		if (!data || data.length === 0) {
-			throw new AppError('Data not found', 404);
-		}
-		res.status(200).json({ success: true, data });
-	} catch (err) {
-		if (err instanceof AppError) {
-			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
-		}
-		CommonLogger.error('Failed to fetch credential', { error: err });
-		res.status(500).json({ error: 'Failed to fetch credential' });
-	}
+    try {
+        const data = await MongoDB.credentials.findOne({ id: new ObjectId(req.params.id), is_active: true });
+        if (!data || data.length === 0) {
+            throw new AppError('Data not found', 404);
+        }
+        res.status(200).json({ success: true, data });
+    } catch (err) {
+        if (err instanceof AppError) {
+            return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+        }
+        CommonLogger.error('Failed to fetch credential', { error: err });
+        res.status(500).json({ error: 'Failed to fetch credential' });
+    }
 };
 
 module.exports.createCredential = async (req, res) => {
-	try {
+    try {
+        let { expire_in } = req.body;
+        if (expire_in !== undefined && (expire_in < 30 || expire_in > 525600)) {
+            throw new AppError('Expire in must be greater than or equal to 30 and less than or equal to 525600', 400);
+        }
+        expire_in = Number.parseInt(expire_in) || 7 * 24 * 60;
         const updateData = await validateCreateCredentialInput(req.body);
         req.password || delete req.password; // Ensure password is not logged
-        const { _created_on, _expire_on } = get_validity(7 * 24 * 60); // minutes
+        const { _created_on, _expire_on } = get_validity(expire_in); // minutes
         updateData._created_by = new ObjectId(req.user.id);
         updateData._created_on = _created_on;
         updateData._expire_on = _expire_on;
-		const result = await MongoDB.credentials.insertOne(updateData);
-		res.status(201).json({ success: true, data: { _id: result.insertedId, ...updateData } });
-	} catch (err) {
+        const result = await MongoDB.credentials.insertOne(updateData);
+        res.status(201).json({ success: true, data: { _id: result.insertedId, ...updateData } });
+    } catch (err) {
         req.password || delete req.password; // Ensure password is not logged
-		if (err instanceof AppError) {
-			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
-		}
-		CommonLogger.error('Failed to create credential', { error: err });
-		res.status(500).json({ error: 'Failed to create credential' });
-	}
+        if (err instanceof AppError) {
+            return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+        }
+        CommonLogger.error('Failed to create credential', { error: err });
+        res.status(500).json({ error: 'Failed to create credential' });
+    }
 };
 
 module.exports.updateCredential = async (req, res) => {
-	// Implementation for updating credential details
-	try {
+    // Implementation for updating credential details
+    try {
         const updateData = validateUpdateCredentialInput(req.params.id, req.body);
-		const result = await MongoDB.credentials.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: updateData });
-		if (result.modifiedCount === 0) {
-			throw new AppError('Credential not found or no changes made', 404);
-		}
-		res.status(200).json({ success: true, data: { id: req.params.id } });
-	} catch (err) {
-		if (err instanceof AppError) {
-			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
-		}
-		CommonLogger.error('Failed to update credential', { error: err });
-		res.status(500).json({ error: 'Failed to update credential' });
-	}
+        updateData._updated_on = new Date().toISOString();
+        updateData._updated_by = new ObjectId(req.user.id);
+        const result = await MongoDB.credentials.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: updateData });
+        if (result.modifiedCount === 0) {
+            throw new AppError('Credential not found or no changes made', 404);
+        }
+        res.status(200).json({ success: true, data: { id: req.params.id } });
+    } catch (err) {
+        if (err instanceof AppError) {
+            return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+        }
+        CommonLogger.error('Failed to update credential', { error: err });
+        res.status(500).json({ error: 'Failed to update credential' });
+    }
 };
 
 module.exports.deleteData = async (req, res) => {
-	// Implementation for deleting a credential item (soft delete by setting is_active to false)
-	try {
-		const data = await MongoDB.credentials.findOne({ _id: new ObjectId(req.params.id), is_active: true });
-		if (!data) {
-			throw new AppError('Credential not found', 404);
-		}
-		const result = await MongoDB.credentials.updateOne({ _id: new ObjectId(req.params.id) }, { $set: { is_active: false } });
-		if (result.modifiedCount === 0) {
-			throw new AppError('Credential not found or already deleted', 404);
-		}
-		res.status(204).json({ success: true, data: { id: req.params.id } });
-	} catch (err) {
-		if (err instanceof AppError) {
-			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
-		}
-		CommonLogger.error('Failed to delete credential', { error: err });
-		res.status(500).json({ error: 'Failed to delete credential' });
-	}
+    // Implementation for deleting a credential item (soft delete by setting is_active to false)
+    try {
+        const deleteData = {
+            is_active: false,
+            _updated_on: new Date().toISOString(),
+            _updated_by: new ObjectId(req.user.id)
+        };
+        const result = await MongoDB.credentials.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: deleteData });
+        if (result.modifiedCount === 0) {
+            throw new AppError('Credential not found or already deleted', 404);
+        }
+        res.status(204).json({ success: true, data: { id: req.params.id } });
+    } catch (err) {
+        if (err instanceof AppError) {
+            return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
+        }
+        CommonLogger.error('Failed to delete credential', { error: err });
+        res.status(500).json({ error: 'Failed to delete credential' });
+    }
 };
 
 module.exports.clearCredentials = async (req, res) => {
@@ -204,7 +212,12 @@ module.exports.clearCredentials = async (req, res) => {
         if (result.length === 0) {
             return res.status(200).json({ success: true, message: 'No expired credentials to clear' });
         }
-        const deleteResult = await MongoDB.credentials.updateMany({ _expire_on: { $lte: req.requestTime }, is_active: true }, { $set: { is_active: false } });
+        const deleteData = {
+            is_active: false,
+            _updated_on: new Date().toISOString(),
+            _updated_by: new ObjectId(req.user.id)
+        };
+        const deleteResult = await MongoDB.credentials.updateMany({ _expire_on: { $lte: req.requestTime }, is_active: true }, { $set: deleteData });
         if (deleteResult.modifiedCount === 0) {
             throw new AppError('Failed to clear expired credentials', 500);
         }

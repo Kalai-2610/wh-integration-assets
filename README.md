@@ -42,7 +42,19 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update a user by ID. |
 | `DELETE` | `/:id` | Delete a user by ID. |
 
-### 3. Credentials Management (`/api/v1/credentials`)
+### 3. Resource Management (`/api/v1/resources`)
+
+*All routes require authentication.*
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Get all resources. |
+| `POST` | `/` | Create a new resource. |
+| `GET` | `/:id` | Get a specific resource by ID. |
+| `PATCH` | `/:id` | Update a resource by ID. |
+| `DELETE` | `/:id` | Delete a resource by ID. |
+
+### 4. Credentials Management (`/api/v1/credentials`)
 
 *All routes require authentication.*
 
@@ -55,7 +67,7 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update credentials by ID. |
 | `DELETE` | `/:id` | Delete credentials by ID. |
 
-### 4. Data Management
+### 5. Data Management
 
 The system provides multiple ways to access data based on the authentication mechanism.
 
@@ -73,8 +85,13 @@ The system provides multiple ways to access data based on the authentication mec
 #### Other Access Methods
 *   **Public Access**: `/open/v1/data` (Limited scopes: read, write, delete).
 *   **Basic Auth**: `/basic/v1/data` (Verified via Basic Authentication).
-*   **Web API Key**: `/web-api/v1/data` (Verified via API Key).
+*   **API Key**: `/api_key/v1/data` (Verified via API Key).
 *   **Token Access**: `/token/v1/data` (Verified via specific Token).
+
+## System Requirements
+
+- **Content-Type**: All `POST` and `PATCH` requests must include the header `Content-Type: application/json`.
+- **Data Integrity**: All records include metadata such as `_created_on`, `_created_by`, `_updated_on`, and `_updated_by` for auditing.
 
 ## Getting Started
 

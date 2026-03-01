@@ -92,7 +92,10 @@ module.exports.updateData = async (req, res) => {
 		if (!req?.scopes?.write) {
 			throw new AppError('Insufficient permissions to update data', 403);
 		}
-		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $set: req.body });
+		const updateData = req.body;
+		updateData._updated_on = new Date().toISOString();
+		updateData._updated_by = new ObjectId(req.user.id);
+		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: updateData });
 		if (result.modifiedCount === 0) {
 			throw new AppError('Data not found or no changes made', 404);
 		}
@@ -112,13 +115,14 @@ module.exports.deleteData = async (req, res) => {
 		if (!req?.scopes?.delete) {
 			throw new AppError('Insufficient permissions to delete data', 403);
 		}
-		const data = await dataCollection.findOne({ _id: new ObjectId(req.params.id), is_active: true });
-		if (!data) {
-			throw new AppError('Data not found', 404);
-		}
-		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $set: { is_active: false } });
+		const deleteData = {
+			is_active: false,
+			_updated_on: new Date().toISOString(),
+			_updated_by: new ObjectId(req.user.id)
+		};
+		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: deleteData });
 		if (result.modifiedCount === 0) {
-			throw new AppError('Data not found or already deleted', 404);
+			throw new AppError('Data not found or no changes made', 404);
 		}
 		res.status(204).json({ success: true, data: { id: req.params.id } });
 	} catch (err) {
