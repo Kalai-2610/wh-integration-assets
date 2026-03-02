@@ -84,7 +84,14 @@ The application requires a `config.env` file in the root directory with the foll
 
 The system provides multiple ways to access data based on the authentication mechanism.
 
-#### Standard API (`/api/v1/:resource`)
+#### Access Methods
+*   **Public Access**: `open` (Limited scopes: read, write, delete).
+*   **Basic Auth**: `basic` (Verified via Basic Authentication).
+*   **API Key**: `api_key` (Verified via API Key).
+*   **Token Access**: `token` (Verified via specific Token).
+*   **OAuth2 Access**: `oauth2` (Verified via OAuth 2.0 Bearer Token).
+
+#### Standard API (`/:access_method/v1/:resource`)
 *Requires standard user authentication.*
 
 | Method | Endpoint | Description |
@@ -92,15 +99,8 @@ The system provides multiple ways to access data based on the authentication mec
 | `GET` | `/` | Get all data. |
 | `POST` | `/` | Create new data entry. |
 | `GET` | `/:id` | Get data by ID. |
-| `PATCH` | `/:id` | Update data by ID. |
+| `PUT` | `/:id` | Update data by ID. |
 | `DELETE` | `/:id` | Delete data by ID. |
-
-#### Other Access Methods
-*   **Public Access**: `/open/v1/data` (Limited scopes: read, write, delete).
-*   **Basic Auth**: `/basic/v1/data` (Verified via Basic Authentication).
-*   **API Key**: `/api_key/v1/data` (Verified via API Key).
-*   **Token Access**: `/token/v1/data` (Verified via specific Token).
-*   **OAuth2 Access**: `/oauth2/v1/data` (Verified via OAuth 2.0 Bearer Token).
 
 ## System Requirements
 
