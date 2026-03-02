@@ -62,6 +62,8 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update a resource by ID. |
 | `DELETE` | `/:id` | Delete a resource by ID. |
 
+[Resource Schema](SCHEMA_README.md)
+
 ### 4. Credentials Management (`/api/v1/credentials`)
 
 *All routes require authentication.*
