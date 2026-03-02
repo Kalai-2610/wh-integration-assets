@@ -30,7 +30,15 @@ The application requires a `config.env` file in the root directory with the foll
 | `DELETE` | `/clear_sessions` | Clear all active sessions (Requires Auth). |
 | `POST` | `/update_user_status` | Update user status (Requires Auth). |
 
-### 2. User Management (`/api/v1/users`)
+### 2. OAuth 2.0 Authentication (`/auth/oauth/v1/`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/authorize` | Get the interactive authorization page (Browser-based). |
+| `POST` | `/authorize` | Submit authorization and get a code (Redirects to callback). |
+| `POST` | `/token` | Exchange code or client credentials for an access token. |
+
+### 3. User Management (`/api/v1/users`)
 
 *All routes require authentication.*
 
@@ -67,11 +75,14 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update credentials by ID. |
 | `DELETE` | `/:id` | Delete credentials by ID. |
 
+> [!NOTE]
+> For `oauth2` type credentials, `client_id` is generated as a UUID v4.
+
 ### 5. Data Management
 
 The system provides multiple ways to access data based on the authentication mechanism.
 
-#### Standard API (`/api/v1/data`)
+#### Standard API (`/api/v1/:resource`)
 *Requires standard user authentication.*
 
 | Method | Endpoint | Description |
@@ -87,6 +98,7 @@ The system provides multiple ways to access data based on the authentication mec
 *   **Basic Auth**: `/basic/v1/data` (Verified via Basic Authentication).
 *   **API Key**: `/api_key/v1/data` (Verified via API Key).
 *   **Token Access**: `/token/v1/data` (Verified via specific Token).
+*   **OAuth2 Access**: `/oauth2/v1/data` (Verified via OAuth 2.0 Bearer Token).
 
 ## System Requirements
 
