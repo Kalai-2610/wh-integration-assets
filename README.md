@@ -30,7 +30,15 @@ The application requires a `config.env` file in the root directory with the foll
 | `DELETE` | `/clear_sessions` | Clear all active sessions (Requires Auth). |
 | `POST` | `/update_user_status` | Update user status (Requires Auth). |
 
-### 2. User Management (`/api/v1/users`)
+### 2. OAuth 2.0 Authentication (`/auth/oauth/v1/`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/authorize` | Get the interactive authorization page (Browser-based). |
+| `POST` | `/authorize` | Submit authorization and get a code (Redirects to callback). |
+| `POST` | `/token` | Exchange code or client credentials for an access token. |
+
+### 3. User Management (`/api/v1/users`)
 
 *All routes require authentication.*
 
@@ -42,7 +50,21 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update a user by ID. |
 | `DELETE` | `/:id` | Delete a user by ID. |
 
-### 3. Credentials Management (`/api/v1/credentials`)
+### 3. Resource Management (`/api/v1/resources`)
+
+*All routes require authentication.*
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Get all resources. |
+| `POST` | `/` | Create a new resource. |
+| `GET` | `/:id` | Get a specific resource by ID. |
+| `PATCH` | `/:id` | Update a resource by ID. |
+| `DELETE` | `/:id` | Delete a resource by ID. |
+
+[Resource Schema](SCHEMA_README.md)
+
+### 4. Credentials Management (`/api/v1/credentials`)
 
 *All routes require authentication.*
 
@@ -55,11 +77,21 @@ The application requires a `config.env` file in the root directory with the foll
 | `PATCH` | `/:id` | Update credentials by ID. |
 | `DELETE` | `/:id` | Delete credentials by ID. |
 
-### 4. Data Management
+> [!NOTE]
+> For `oauth2` type credentials, `client_id` is generated as a UUID v4.
+
+### 5. Data Management
 
 The system provides multiple ways to access data based on the authentication mechanism.
 
-#### Standard API (`/api/v1/data`)
+#### Access Methods
+*   **Public Access**: `open` (Limited scopes: read, write, delete).
+*   **Basic Auth**: `basic` (Verified via Basic Authentication).
+*   **API Key**: `api_key` (Verified via API Key).
+*   **Token Access**: `token` (Verified via specific Token).
+*   **OAuth2 Access**: `oauth2` (Verified via OAuth 2.0 Bearer Token).
+
+#### Standard API (`/:access_method/v1/:resource`)
 *Requires standard user authentication.*
 
 | Method | Endpoint | Description |
@@ -67,14 +99,13 @@ The system provides multiple ways to access data based on the authentication mec
 | `GET` | `/` | Get all data. |
 | `POST` | `/` | Create new data entry. |
 | `GET` | `/:id` | Get data by ID. |
-| `PATCH` | `/:id` | Update data by ID. |
+| `PUT` | `/:id` | Update data by ID. |
 | `DELETE` | `/:id` | Delete data by ID. |
 
-#### Other Access Methods
-*   **Public Access**: `/open/v1/data` (Limited scopes: read, write, delete).
-*   **Basic Auth**: `/basic/v1/data` (Verified via Basic Authentication).
-*   **Web API Key**: `/web-api/v1/data` (Verified via API Key).
-*   **Token Access**: `/token/v1/data` (Verified via specific Token).
+## System Requirements
+
+- **Content-Type**: All `POST` and `PATCH` requests must include the header `Content-Type: application/json`.
+- **Data Integrity**: All records include metadata such as `_created_on`, `_created_by`, `_updated_on`, and `_updated_by` for auditing.
 
 ## Getting Started
 
