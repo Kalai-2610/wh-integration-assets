@@ -48,9 +48,9 @@ The application requires a `config.env` file in the root directory with the foll
 | `POST` | `/` | Create a new user. |
 | `GET` | `/:id` | Get a specific user by ID. |
 | `PATCH` | `/:id` | Update a user by ID. |
-| `DELETE` | `/:id` | Delete a user by ID. |
+| `DELETE` | `/:id` | Delete a user by ID (Currently disabled). |
 
-### 3. Resource Management (`/api/v1/resources`)
+### 4. Resource Management (`/api/v1/resources`)
 
 *All routes require authentication.*
 
@@ -64,7 +64,7 @@ The application requires a `config.env` file in the root directory with the foll
 
 [Resource Schema](SCHEMA_README.md)
 
-### 4. Credentials Management (`/api/v1/credentials`)
+### 5. Credentials Management (`/api/v1/credentials`)
 
 *All routes require authentication.*
 
@@ -80,26 +80,48 @@ The application requires a `config.env` file in the root directory with the foll
 > [!NOTE]
 > For `oauth2` type credentials, `client_id` is generated as a UUID v4.
 
-### 5. Data Management
+### 6. Dynamic Data API
 
-The system provides multiple ways to access data based on the authentication mechanism.
+The system allows creating custom resources with dynamic schemas. Each resource has its own dedicated collection.
 
 #### Access Methods
-*   **Public Access**: `open` (Limited scopes: read, write, delete).
-*   **Basic Auth**: `basic` (Verified via Basic Authentication).
-*   **API Key**: `api_key` (Verified via API Key).
-*   **Token Access**: `token` (Verified via specific Token).
-*   **OAuth2 Access**: `oauth2` (Verified via OAuth 2.0 Bearer Token).
+Data can be accessed via different authentication mechanisms:
+*   **Public Access**: `/open/v1/:resource_name` (Limited permissions).
+*   **Basic Auth**: `/basic/v1/:resource_name` (Verified via Basic Authentication).
+*   **API Key**: `/api_key/v1/:resource_name` (Verified via API Key).
+*   **Token Access**: `/token/v1/:resource_name` (Verified via specific Token).
+*   **OAuth2 Access**: `/oauth2/v1/:resource_name` (Verified via OAuth 2.0 Bearer Token).
 
-#### Standard API (`/:access_method/v1/:resource`)
+#### Dynamic Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Get all data for the resource. Supports pagination and sorting. |
+| `POST` | `/` | Create a new data entry (Validated against resource schema). |
+| `GET` | `/:id` | Get a specific data entry by ID. |
+| `PUT` | `/:id` | Update a data entry by ID. |
+| `DELETE` | `/:id` | Delete a data entry by ID (Soft delete). |
+
+#### Query Parameters (GET Requests)
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `page` | `number` | Page number (Default: 1). |
+| `size` | `number` | Items per page (Default: 10, Max: 25). |
+| `sortBy` | `string` | Field to sort by (Default: `_created_on`). |
+| `sortOrder` | `string` | Sort order: `asc` or `desc` (Default: `asc`). |
+
+### 7. Standard Data API (`/api/v1/data`)
+
+A general-purpose data store that does not require a pre-defined resource schema.
+
 *Requires standard user authentication.*
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/` | Get all data. |
-| `POST` | `/` | Create new data entry. |
+| `GET` | `/` | Get all data from the default store. |
+| `POST` | `/` | Create a new data entry. |
 | `GET` | `/:id` | Get data by ID. |
-| `PUT` | `/:id` | Update data by ID. |
+| `PATCH` | `/:id` | Update data by ID. |
 | `DELETE` | `/:id` | Delete data by ID. |
 
 ## System Requirements
