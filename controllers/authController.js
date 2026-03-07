@@ -13,7 +13,7 @@ module.exports.sign_in = async (req, res) => {
 		if (!email || !password) {
 			throw new AppError('Email and password are required', 400);
 		}
-		const user = await MongoDB.users.findOne({ email });
+		const user = await MongoDB.users.findOne({ email, is_active: true });
 		if (!user) {
 			throw new AppError('Invalid email or password', 400);
 		}
@@ -24,7 +24,15 @@ module.exports.sign_in = async (req, res) => {
 		const access_token = generateJWT({ userId: user._id.toString() }, '10m');
 		const { _created_on, _expire_on } = get_validity(60);
 		const session = await MongoDB.sessions.insertOne({ userId: user._id, access_token, _created_on, _expire_on });
-		res.status(200).json({ success: true, sessionId: session.insertedId, userId: user._id, access_token, _expire_on });
+		const isSystem = CacheMechanism.get('systemUser')._id.toString() === user._id.toString();
+		res.status(200).json({
+			success: true,
+			sessionId: session.insertedId,
+			userId: user._id,
+			isSystem,
+			access_token,
+			_expire_on
+		});
 	} catch (err) {
 		if (err instanceof AppError) {
 			return res.status(err.statusCode).json({ success: false, error: err.message, ...err.params });
@@ -39,8 +47,10 @@ module.exports.verifyUser = async (req, res, next) => {
 		let sessionId = req.header('sessionId');
 		if (!token) {
 			throw new AppError('Access token is required', 401);
+		} else if (!sessionId) {
+			throw new AppError('Session ID is required', 401);
 		}
-		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
+		token = token?.startsWith('Bearer ') ? token.slice(7) : '';
 		const status = verifyJWT(token);
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
@@ -56,10 +66,7 @@ module.exports.verifyUser = async (req, res, next) => {
 			throw new AppError('Access token expired', 401, { is_token_expired: true });
 		}
 		req.user = getJWTPayload(token)?.userId;
-		const user = await MongoDB.db.collection('users').findOne({ _id: new ObjectId(req.user), is_active: true });
-		if (!user) {
-			throw new AppError('Invalid user token', 401);
-		}
+		req.isSystem = CacheMechanism.get('systemUser')._id.toString() === req.user;
 		next();
 	} catch (err) {
 		if (err instanceof AppError) {
@@ -77,7 +84,7 @@ module.exports.refresh_token = async (req, res) => {
 		if (!token) {
 			throw new AppError('Access token is required', 401);
 		}
-		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
+		token = token?.startsWith('Bearer ') ? token.slice(7) : '';
 		const status = verifyJWT(token);
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
@@ -91,7 +98,7 @@ module.exports.refresh_token = async (req, res) => {
 		}
 		if (status.is_token_expired) {
 			req.user = getJWTPayload(token)?.userId;
-			const user = await MongoDB.db.collection('users').findOne({ _id: new ObjectId(req.user), is_active: true });
+			const user = await MongoDB.users.findOne({ _id: new ObjectId(req.user), is_active: true });
 			if (!user) {
 				throw new AppError('Invalid user token', 401);
 			}
@@ -116,7 +123,7 @@ module.exports.sign_out = async (req, res) => {
 		if (!token) {
 			throw new AppError('Access token is required', 401);
 		}
-		token = token?.startsWith('Bearer ') ? token.slice(7) : "";
+		token = token?.startsWith('Bearer ') ? token.slice(7) : '';
 		const status = verifyJWT(token);
 		if (status.is_invalid) {
 			throw new AppError('Invalid access token', 401);
@@ -138,10 +145,9 @@ module.exports.sign_out = async (req, res) => {
 
 module.exports.clear_sessions = async (req, res) => {
 	try {
-		const system = CacheMechanism.get('systemUser');
-		if (req.user !== system._id.toString()) {
+		if (!req.isSystem) {
 			throw new AppError('Unauthorized to clear sessions', 403);
-		};
+		}
 		const sessions = await MongoDB.sessions.find({ _expire_on: { $lte: req.requestTime } }).toArray();
 		if (sessions.length === 0) {
 			res.status(200).json({ success: true, message: 'Expired sessions are already cleared' });
@@ -165,9 +171,9 @@ module.exports.updateUserStatus = async (req, res) => {
 	// Implementation for activating/deactivating a user
 	try {
 		const system = CacheMechanism.get('systemUser');
-		if (req.user !== system._id.toString()) {
+		if (!req.isSystem) {
 			throw new AppError('Unauthorized to change user status', 403);
-		};
+		}
 		const { _id, is_active } = req.body;
 		if (typeof is_active !== 'boolean') {
 			throw new AppError('is_active must be a boolean', 400);
@@ -176,11 +182,14 @@ module.exports.updateUserStatus = async (req, res) => {
 		if (!user) {
 			throw new AppError('User not found', 404);
 		} else if (user.email === system.email) {
-			throw new AppError('Cannot change status of this user', 403);
+			throw new AppError('Cannot change status of system user', 403);
 		}
 		const result = await MongoDB.users.updateOne({ _id: new ObjectId(_id) }, { $set: { is_active } });
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
+		}
+		if (!is_active) {
+			MongoDB.sessions.deleteMany({ userId: new ObjectId(_id) });
 		}
 		res.status(200).json({ success: true, data: { _id, is_active } });
 	} catch (err) {
@@ -195,16 +204,17 @@ module.exports.updateUserStatus = async (req, res) => {
 module.exports.change_password = async (req, res) => {
 	// Implementation for resetting user password
 	try {
-		const { _id, new_password } = req.body;
-		if (!new_password || !_id) {
-			throw new AppError('New password and user ID are required', 400);
+		const { new_password, old_password } = req.body;
+		if (!new_password || !old_password) {
+			throw new AppError('New password and old_password are required', 400);
 		}
-		const system = CacheMechanism.get('systemUser');
-		const user = await MongoDB.users.findOne({ _id: new ObjectId(_id) });
+		const user = await MongoDB.users.findOne({ _id: new ObjectId(req.userId) });
 		if (!user) {
 			throw new AppError('User not found', 404);
-		} else if (req.user !== _id && req.user !== system._id.toString()) {
-			throw new AppError('Unauthorized to change password', 403);
+		}
+		const VERIIFICAION = await verifyPasswordArgon2i(old_password, user.salt, user.hash);
+		if (!VERIIFICAION) {
+			throw new AppError('Invalid old password, 401');
 		}
 		const { hash, salt } = await hashPasswordArgon2i(new_password);
 		const result = await MongoDB.users.updateOne({ _id: new ObjectId(_id) }, { $set: { hash, salt } });
@@ -233,7 +243,12 @@ module.exports.verifyBasicAuth = async (req, res, next) => {
 		if (!username || !password) {
 			throw new AppError('Username and password are required in Basic auth', 400);
 		}
-		const credential = await MongoDB.credentials.findOne({ type: 'basic', username, is_active: true, _expire_on: { $gt: req.requestTime } });
+		const credential = await MongoDB.credentials.findOne({
+			type: 'basic',
+			username,
+			is_active: true,
+			_expire_on: { $gt: req.requestTime }
+		});
 		if (!credential) {
 			throw new AppError('Invalid username or password', 401);
 		}
@@ -282,7 +297,7 @@ module.exports.verifyToken = async (req, res, next) => {
 		const token = req.header('authorization')?.startsWith('Bearer ') ? req.header('authorization').slice(7) : null;
 		if (!token) {
 			throw new AppError('Bearer token is required', 401);
-		};
+		}
 		const credential = await MongoDB.credentials.findOne({
 			token: token,
 			is_active: true,
@@ -344,4 +359,4 @@ module.exports.verifyOauth = async (req, res, next) => {
 		CommonLogger.error('Failed to verify OAuth token', { error: err });
 		res.status(500).json({ success: false, error: 'Internal server error' });
 	}
-}
+};

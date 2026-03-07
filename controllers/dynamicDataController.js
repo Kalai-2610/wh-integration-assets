@@ -5,8 +5,6 @@ const { CommonLogger } = require('../utils/logger');
 const { validateSchema } = require('../utils/schema');
 const { ObjectId } = require('mongodb');
 
-const valid_auth_methods = ['open', 'basic', 'api_key', 'token'];
-
 async function validateAuthType(api_path, originalUrl) {
     const type = originalUrl.split('/')[1];
     const resource = await MongoDB.resources.findOne({ api_path });
@@ -22,7 +20,7 @@ async function validateAuthType(api_path, originalUrl) {
 module.exports.getAllDynamicData = async (req, res) => {
     try {
         if(!req.scopes.read){
-            throw new AppError('Insufficient permissions to read data', 403);
+            throw new AppError('Insufficient permissions to read data', 401);
         }
         const resource = await validateAuthType(req.params.resource_name, req.originalUrl);
         const size = Number.parseInt(req.query.size) || 10;
@@ -62,7 +60,7 @@ module.exports.getAllDynamicData = async (req, res) => {
 module.exports.getDynamicData = async (req, res) => {
     try {
         if(!req.scopes.read){
-            throw new AppError('Insufficient permissions to read data', 403);
+            throw new AppError('Insufficient permissions to read data', 401);
         }
         const resource = await validateAuthType(req.params.resource_name, req.originalUrl);
         const data = await MongoDB.db.collection(resource.reference_name).findOne({ _id: new ObjectId(req.params.id) });
@@ -82,7 +80,7 @@ module.exports.getDynamicData = async (req, res) => {
 module.exports.createDynamicData = async (req, res) => {
     try {
         if(!req.scopes.write){
-            throw new AppError('Insufficient permissions to add data', 403);
+            throw new AppError('Insufficient permissions to add data', 401);
         }
         const resource = await validateAuthType(req.params.resource_name, req.originalUrl);
         const { errors, value } = await validateSchema(resource.schema, req.body);
@@ -109,7 +107,7 @@ module.exports.createDynamicData = async (req, res) => {
 module.exports.updateDynamicData = async (req, res) => {
     try {
         if(!req.scopes.write){
-            throw new AppError('Insufficient permissions to update data', 403);
+            throw new AppError('Insufficient permissions to update data', 401);
         }
         const dataId = req.params.id;
         const resource = await validateAuthType(req.params.resource_name, req.originalUrl);
@@ -141,7 +139,7 @@ module.exports.deleteDynamicData = async (req, res) => {
     // Implementation for deleting a user
     try {
         if(!req.scopes.delete){
-            throw new AppError('Insufficient permissions to delete data', 403);
+            throw new AppError('Insufficient permissions to delete data', 401);
         }
         const dataId = req.params.id;
         const resource = await validateAuthType(req.params.resource_name, req.originalUrl);

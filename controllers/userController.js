@@ -5,42 +5,45 @@ const { CommonLogger } = require('../utils/logger');
 const { hashPasswordArgon2i } = require('../utils/crypt');
 const { ObjectId } = require('mongodb');
 
-const LOOK_UP = {
-	$lookup: {
-		from: 'users',
-		let: { creatorId: '$_created_by' },
-		pipeline: [
-			{ $match: { $expr: { $eq: ['$_id', '$$creatorId'] } } },
-			{ $project: { name: 1, email: 1, _id: 1, is_active: 1 } } // remove salt & hash from joined user
-		],
-		as: 'createdBy'
-	}
-};
 const PROJECT = {
+	// remove salt, hash & _createdBy from main Collection
 	$project: {
 		salt: 0,
 		hash: 0,
 		_created_by: 0,
+		_updated_by: 0
 	}
 };
-const UNWIND = {
-	$unwind: {
-		path: '$createdBy',
-		preserveNullAndEmptyArrays: true
-	}
-};
+
 module.exports.getAllUsers = async (req, res) => {
 	try {
+		const filter = { is_active: req.query?.is_active != 0 };
 		const size = Number.parseInt(req.query.size) || 10;
 		const page = Number.parseInt(req.query.page) || 1;
+		if (req.query?.search?.trim()) {
+			filter.$or = [
+				{ name: { $regex: req.query.search.trim(), $options: 'i' } },
+				{ email: { $regex: req.query.search.trim(), $options: 'i' } }
+			];
+		}
 		const sortDetails = {};
 		sortDetails.sortBy = req.query.sortBy || '_created_on';
 		sortDetails.sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
-		const is_active = req.query?.is_active != 0;
 		const skip = (page - 1) * size;
 
-		const total = await MongoDB.users.countDocuments({ is_active });
-		const users = await MongoDB.users.aggregate([{ $match: { is_active } }, LOOK_UP, UNWIND, { $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } }, PROJECT, { $skip: skip }, { $limit: size }]).toArray();
+		const total = await MongoDB.users.countDocuments(filter);
+		const users = await MongoDB.users
+			.aggregate([
+				{ $match: filter },
+				MongoDB.LOOK_UP_CREATOR,
+				MongoDB.LOOK_UP_UPDATOR,
+				MongoDB.SET,
+				{ $sort: { [sortDetails.sortBy]: sortDetails.sortOrder } },
+				PROJECT,
+				{ $skip: skip },
+				{ $limit: size }
+			])
+			.toArray();
 		res.body = {
 			success: true,
 			pagination: {
@@ -61,12 +64,19 @@ module.exports.getAllUsers = async (req, res) => {
 
 module.exports.getUser = async (req, res) => {
 	try {
-		const user = await MongoDB.users.aggregate([{ $match: { _id: new ObjectId(req.params.id) } }, LOOK_UP, UNWIND, PROJECT]).toArray();
-		delete user?.salt;
-		delete user?.hash;
-		if (!user || user.length === 0) {
+		const user = (await MongoDB.users.aggregate([
+				{ $match: { _id: new ObjectId(req.params.id) } },
+				MongoDB.LOOK_UP_CREATOR,
+				MongoDB.LOOK_UP_UPDATOR,
+				MongoDB.SET,
+				PROJECT
+			]).toArray()
+		).at(0);
+		if (!user) {
 			throw new AppError('User not found', 404);
 		}
+		delete user?.salt;
+		delete user?.hash;
 		res.status(200).json({ success: true, data: user });
 	} catch (err) {
 		if (err instanceof AppError) {
@@ -83,6 +93,10 @@ module.exports.createUser = async (req, res) => {
 		delete req.body.password;
 		if (!name || !email || !password) {
 			throw new AppError('Name, email, and password are required', 400);
+		}
+		const name_regex = /^[a-zA-Z][a-zA-Z0-9 ]{0,59}$/;
+		if (!name_regex.test(name)) {
+			throw new AppError(`Name does not match the required format ${name_regex}`, 400);
 		}
 		const existingUser = await MongoDB.users.findOne({ email });
 		if (existingUser) {
@@ -119,9 +133,16 @@ module.exports.updateUser = async (req, res) => {
 		if (Object.keys(updateData).length === 0) {
 			throw new AppError('No valid fields to update', 400);
 		}
+		const name_regex = /^[a-zA-Z][a-zA-Z0-9 ]{0,59}$/;
+		if (!name_regex.test(name)) {
+			throw new AppError(`Name does not match the required format ${name_regex}`, 400);
+		}
 		updateData._updated_on = new Date().toISOString();
 		updateData._updated_by = new ObjectId(req.user);
-		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId), is_active: true }, { $set: updateData });
+		const result = await MongoDB.users.updateOne(
+			{ _id: new ObjectId(userId), is_active: true },
+			{ $set: updateData }
+		);
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found or no changes made', 404);
 		}
@@ -152,7 +173,10 @@ module.exports.deleteUser = async (req, res) => {
 			_updated_on: new Date().toISOString(),
 			_updated_by: new ObjectId(req.user)
 		};
-		const result = await MongoDB.users.updateOne({ _id: new ObjectId(userId), is_active: true }, { $set: deleteData });
+		const result = await MongoDB.users.updateOne(
+			{ _id: new ObjectId(userId), is_active: true },
+			{ $set: deleteData }
+		);
 		if (result.modifiedCount === 0) {
 			throw new AppError('User not found', 404);
 		}

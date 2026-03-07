@@ -94,7 +94,7 @@ module.exports.updateData = async (req, res) => {
 		}
 		const updateData = req.body;
 		updateData._updated_on = new Date().toISOString();
-		updateData._updated_by = new ObjectId(req.user.id);
+		updateData._updated_by = new ObjectId(req.user);
 		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: updateData });
 		if (result.modifiedCount === 0) {
 			throw new AppError('Data not found or no changes made', 404);
@@ -118,7 +118,7 @@ module.exports.deleteData = async (req, res) => {
 		const deleteData = {
 			is_active: false,
 			_updated_on: new Date().toISOString(),
-			_updated_by: new ObjectId(req.user.id)
+			_updated_by: new ObjectId(req.user)
 		};
 		const result = await dataCollection.updateOne({ _id: new ObjectId(req.params.id), is_active: true }, { $set: deleteData });
 		if (result.modifiedCount === 0) {
