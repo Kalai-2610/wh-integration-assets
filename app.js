@@ -64,6 +64,16 @@ class App {
 	#app;
 	constructor() {
 		this.#app = express();
+		// CORS Middleware - must be first
+		this.#app.use((req, res, next) => {
+			const origin = req.headers.origin;
+			res.setHeader('Access-Control-Allow-Origin', origin);
+			res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+			res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, sessionId');
+			res.setHeader('Access-Control-Allow-Credentials', 'true');
+			res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+			next();
+		});
 		this.mongo_db = new MongoDB();
 		if (CacheMechanism.get("NODE_ENV") == 'development') {
 			this.#app.use(morgan('dev'));

@@ -68,7 +68,7 @@ async function validateCreateCredentialInput(data) {
 		let flag = true;
 		while (flag) {
 			result.client_id = generateUUIDv4();
-			existingClient = await MongoDB.credentials.findOne({ client_id: result.client_id });
+			let existingClient = await MongoDB.credentials.findOne({ client_id: result.client_id });
 			if (!existingClient) {
 				flag = false;
 			}
@@ -223,6 +223,8 @@ module.exports.createCredential = async (req, res) => {
 		const { _created_on, _expire_on } = get_validity(expire_in); // minutes
 		updateData._created_by = new ObjectId(req.user);
 		updateData._created_on = _created_on;
+		updateData._updated_by = updateData._created_by;
+		updateData._updated_on = _created_on;
 		updateData._expire_on = _expire_on;
 		const result = await MongoDB.credentials.insertOne(updateData);
 		res.status(201).json({ success: true, data: { _id: result.insertedId, ...updateData } });

@@ -5,7 +5,7 @@ const { CommonLogger } = require('../utils/logger');
 const { generateJoiSchema } = require('../utils/schema');
 const { ObjectId } = require('mongodb');
 
-const valid_auth_methods = ['open', 'basic', 'api_key', 'token'];
+const valid_auth_methods = ['open', 'basic', 'api_key', 'token', 'oauth2'];
 const PROJECT = { $project: { _created_by: 0, _updated_by: 0 } };
 
 module.exports.getAllResources = async (req, res) => {
@@ -146,7 +146,9 @@ module.exports.createResource = async (req, res) => {
 			allowed_auth_methods,
 			is_active: true,
 			_created_on: new Date().toISOString(),
-			_created_by: new ObjectId(req.user)
+			_created_by: new ObjectId(req.user),
+			_updated_on: new Date().toISOString(),
+			_updated_by: new ObjectId(req.user)
 		};
 		const result = await MongoDB.resources.insertOne(newResource);
 		MongoDB.db.createCollection(reference_name);
@@ -179,10 +181,7 @@ module.exports.updateResource = async (req, res) => {
 			(auth_method) => !valid_auth_methods.includes(auth_method)
 		);
 		if (invalid_auth_methods?.length > 0) {
-			throw new AppError(
-				'Invalid allowed_auth_methods, Allowed methods are ' + valid_auth_methods.join(', '),
-				400
-			);
+			throw new AppError('Invalid allowed_auth_methods, Allowed methods are ' + valid_auth_methods.join(', '), 400);
 		}
 		const name_regex = /^[a-zA-Z][a-zA-Z0-9 _-]{0,59}$/;
 		if (name && !name_regex.test(name)) {
@@ -195,9 +194,9 @@ module.exports.updateResource = async (req, res) => {
 		let errors;
 		if (schema) {
 			errors = (await generateJoiSchema(schema)).errors;
-			if (errors.length) {
-				throw new AppError('Invalid schema', 400, { errors });
-			}
+		}
+		if (errors?.length) {
+			throw new AppError('Invalid schema', 400, { errors });
 		}
 		const existingResource = await MongoDB.resources
 			.find({ $or: [{ api_path }, { name }], _id: { $ne: new ObjectId(resourceId) } })
