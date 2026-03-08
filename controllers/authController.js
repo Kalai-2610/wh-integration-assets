@@ -19,7 +19,7 @@ module.exports.sign_in = async (req, res) => {
 		}
 		const isPasswordValid = await verifyPasswordArgon2i(password, user.salt, user.hash);
 		if (!isPasswordValid) {
-			throw new AppError('nvalid email or password', 401);
+			throw new AppError('Invalid email or password', 401);
 		}
 		const access_token = generateJWT({ userId: user._id.toString() }, '10m');
 		const { _created_on, _expire_on } = get_validity(60);
@@ -29,6 +29,7 @@ module.exports.sign_in = async (req, res) => {
 			success: true,
 			sessionId: session.insertedId,
 			userId: user._id,
+			user_name: user.name,
 			isSystem,
 			access_token,
 			_expire_on
