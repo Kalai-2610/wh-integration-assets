@@ -14,6 +14,7 @@ const OAuthRouter = require('./routes/oauthRouter');
 
 const jsonParser = express.json();
 const urlEncodedParser = express.urlencoded({ extended: true });
+const allowedOrigins = CacheMechanism.get('CORS_ORIGINS');
 
 async function processRequest(req, res, next) {
 	req.requestTime = new Date().toISOString();
@@ -67,15 +68,22 @@ class App {
 		// CORS Middleware - must be first
 		this.#app.use((req, res, next) => {
 			const origin = req.headers.origin;
-			res.setHeader('Access-Control-Allow-Origin', origin);
-			res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+			if (origin && allowedOrigins.has(origin)) {
+				res.setHeader('Access-Control-Allow-Origin', origin);
+			}
+			res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
 			res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, sessionId');
 			res.setHeader('Access-Control-Allow-Credentials', 'true');
-			res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+			res.setHeader('Access-Control-Max-Age', '86400');
+			// Handle preflight request
+			if (req.method === 'OPTIONS') {
+				return res.status(204).end();
+			}
 			next();
 		});
+
 		this.mongo_db = new MongoDB();
-		if (CacheMechanism.get("NODE_ENV") == 'development') {
+		if (CacheMechanism.get('NODE_ENV') == 'development') {
 			this.#app.use(morgan('dev'));
 		}
 
@@ -92,8 +100,7 @@ class App {
 		this.#app.use('/basic/v1', verifyBasicAuth, dynamicDataRouter);
 		this.#app.use('/api_key/v1', verifyAPIKey, dynamicDataRouter);
 		this.#app.use('/token/v1', verifyToken, dynamicDataRouter);
-		this.#app.use('/oauth2/v1', verifyOauth, dynamicDataRouter)
-
+		this.#app.use('/oauth2/v1', verifyOauth, dynamicDataRouter);
 
 		// Invalid URL handler
 		this.#app.use(async (req, res) => {
@@ -110,7 +117,7 @@ class App {
 
 	start(port) {
 		this.port = port || 3000;
-		this.#app.listen(port, () => {
+		this.#app.listen(port, "0.0.0.0", () => {
 			console.info(`Running on port ${port}`);
 		});
 	}
