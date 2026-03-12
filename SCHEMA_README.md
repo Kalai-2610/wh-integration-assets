@@ -1,6 +1,6 @@
 # Metadata Schema Documentation
 
-This document describes the structure of the metadata used by `schmeGenerator.js` to dynamically generate Joi validation schemas.
+This document describes the structure of the metadata used by `utils/schema.js` to dynamically generate Joi validation schemas.
 
 ## Overview
 
@@ -12,7 +12,7 @@ All field objects support the following base properties:
 
 | Property | Type | Description |
 | :--- | :--- | :--- |
-| `key` | `string` | The name of the field. |
+| `key` | `string` | The name of the field. Must match pattern: `^[a-zA-Z][a-zA-Z0-9_]{0,20}$`. |
 | `type` | `string` | One of: `string`, `number`, `boolean`, `date`, `datetime`, `object`. |
 | `required` | `boolean` | If true, the field must be present and non-null. |
 | `is_multiple`| `boolean` | If true, the field is treated as an array of the specified type. |
@@ -31,8 +31,8 @@ All field objects support the following base properties:
 | Property | Type | Description |
 | :--- | :--- | :--- |
 | `options` | `string[]` | A fixed list of allowed string values. |
-| `min` | `number` | Minimum string length (0 - 3000). |
-| `max` | `number` | Maximum string length (0 - 3000). |
+| `min` | `number` | Minimum string length (Default: 0, Max: 3000). |
+| `max` | `number` | Maximum string length (Max: 3000). |
 | `regex` | `string` | RegEx pattern for validation. |
 | `email` | `boolean` | Validates as a proper email format. |
 | `lowercase` | `boolean` | Forces/validates value is lowercase. |
@@ -55,12 +55,12 @@ All field objects support the following base properties:
 ### 3. Date (`type: "date"`)
 
 Validates standard date inputs.
-*   **Property:** `min` / `max` (Accepts date strings or Date objects).
+*   **Property:** `min` / `max` (Accepts ISO date strings or Date objects).
 *   **Property:** `options` (Array of allowed date values).
 
 ### 4. DateTime (`type: "datetime"`)
 
-Validates ISO UTC datetime strings (Format: `YYYY-MM-DDTHH:mm:ss.sssZ`).
+Validates strict ISO UTC datetime strings (Format: `YYYY-MM-DDTHH:mm:ss.sssZ`).
 *   **Property:** `min` / `max` (Must be ISO UTC strings).
 *   **Property:** `options` (Array of ISO UTC strings).
 
@@ -71,10 +71,14 @@ Allows for recursive/nested structures.
 
 ---
 
-## Global Constraints
+## System Constraints
 
-The following hardcoded limits are enforced by the generator:
+### 1. Restricted Keys
+The following keys are reserved by the system and cannot be used as field names:
+`_id`, `_created_by`, `_createdBy`, `_created_on`, `_updated_by`, `_updatedBy`, `_updated_on`, `_expire_on`, `is_active`.
 
+### 2. Global Limits
+The following hardcoded limits are enforced:
 *   **Strings**: 0 to 3000 characters.
 *   **Numbers**: -999,999,999 to 999,999,999.
 *   **Decimals**: 1 to 5 decimal places.

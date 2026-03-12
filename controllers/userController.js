@@ -110,7 +110,9 @@ module.exports.createUser = async (req, res) => {
 			hash,
 			is_active: true,
 			_created_on: new Date().toISOString(),
-			_created_by: new ObjectId(req.user)
+			_created_by: new ObjectId(req.user),
+			_updated_on: new Date().toISOString(),
+			_updated_by: new ObjectId(req.user)
 		};
 		const result = await MongoDB.users.insertOne(newUser);
 		res.status(201).json({ success: true, data: { _id: result.insertedId } });
