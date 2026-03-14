@@ -5,7 +5,7 @@ const { ObjectId } = require('mongodb');
 
 let dataCollection;
 setInterval(() => {
-	dataCollection = MongoDB.db.collection('data');
+	dataCollection = MongoDB?.db?.collection('data');
 }, 7 * 1000); // Keep the process alive
 
 module.exports.getAllData = async (req, res) => {
