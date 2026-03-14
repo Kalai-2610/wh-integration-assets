@@ -48,7 +48,7 @@ class RequestLogger {
         logData.message || delete logData.message;
         logData.error || delete logData.error
         if(CacheMechanism.get("NODE_ENV") === 'production' && ['error', 'warn', 'info'].includes(level)) {
-			MongoDB.logs.insertOne(logData).catch( err => {
+			MongoDB.logs?.insertOne(logData)?.catch( err => {
 				console.error('Failed to save log to MongoDB:', err);
             });
         } else {
@@ -88,7 +88,7 @@ class CommonLogger {
 				: undefined
 		};
         if(CacheMechanism.get("NODE_ENV") === 'production' && ['error', 'warn', 'info'].includes(level)) {
-			MongoDB.logs.insertOne(logData).catch( err => {
+			MongoDB.logs?.insertOne(logData)?.catch( err => {
 				console.error('Failed to save log to MongoDB:', err);
             });
         } else {
