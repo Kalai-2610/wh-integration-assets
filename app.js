@@ -14,7 +14,7 @@ const OAuthRouter = require('./routes/oauthRouter');
 
 const jsonParser = express.json();
 const urlEncodedParser = express.urlencoded({ extended: true });
-const allowedOrigins = CacheMechanism.get('CORS_ORIGINS');
+// const allowedOrigins = CacheMechanism.get('CORS_ORIGINS');
 
 async function processRequest(req, res, next) {
 	req.requestTime = new Date().toISOString();
@@ -68,7 +68,7 @@ class App {
 		// CORS Middleware - must be first
 		this.#app.use((req, res, next) => {
 			const origin = req.headers.origin;
-			if (origin && allowedOrigins.has(origin)) {
+			if (origin) {
 				res.setHeader('Access-Control-Allow-Origin', origin);
 			}
 			res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
