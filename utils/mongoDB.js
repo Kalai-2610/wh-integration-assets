@@ -119,7 +119,8 @@ class MongoDB {
 								hash,
 								is_active: true,
 								// is_admin: true,
-								_created_at: new Date().toISOString()
+								_created_on: new Date().toISOString(),
+								_updated_on: new Date().toISOString()
 							});
 							console.log('System User created');
 						}
