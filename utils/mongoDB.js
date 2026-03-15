@@ -104,13 +104,13 @@ class MongoDB {
 				console.log('Collections to Create: ', JSON.stringify(collections_toCreate));
 				await Promise.all(
 					collections_toCreate.map(async (item) => {
-						if (item === 'logs') {
+						if (item === '_logs') {
 							await MongoDB.db.createCollection(item, logs_options);
 						} else {
 							await MongoDB.db.createCollection(item);
 						}
 						console.log('System Collection created: ', item);
-						if (item === 'users') {
+						if (item === '_users') {
 							const { salt, hash } = await hashPasswordArgon2i(process.env.ADMIN_PASSWORD.trim());
 							await MongoDB.db.collection(item).insertOne({
 								name: 'System',
