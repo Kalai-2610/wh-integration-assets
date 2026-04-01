@@ -7,7 +7,7 @@ const CacheMechanism = require('./cache');
 
 const LIMITS = {
 	STRING_MIN: 0,
-	STRING_MAX: 3000,
+	STRING_MAX: 300000,
 
 	NUMBER_MIN: -999999999,
 	NUMBER_MAX: 999999999,
