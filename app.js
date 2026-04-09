@@ -12,8 +12,8 @@ const DataRouter = require('./routes/dataRouter');
 const dynamicDataRouter = require('./routes/dynamicDataRouter');
 const OAuthRouter = require('./routes/oauthRouter');
 
-const jsonParser = express.json();
-const urlEncodedParser = express.urlencoded({ extended: true });
+const jsonParser = express.json({limit: '10mb'});
+const urlEncodedParser = express.urlencoded({ extended: true, limit: '10mb' });
 // const allowedOrigins = CacheMechanism.get('CORS_ORIGINS');
 
 async function processRequest(req, res, next) {
