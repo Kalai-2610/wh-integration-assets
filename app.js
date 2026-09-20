@@ -102,6 +102,11 @@ class App {
 		this.#app.use('/token/v1', verifyToken, dynamicDataRouter);
 		this.#app.use('/oauth2/v1', verifyOauth, dynamicDataRouter);
 
+
+		// Health Check
+		this.#app.use('/health', async (req, res) => {
+			res.sendStatus(200)
+		})
 		// Invalid URL handler
 		this.#app.use(async (req, res) => {
 			res.body = {
